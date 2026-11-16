@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dr. Gendy</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('dg:theme')||'dark'}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans+Arabic:wght@400;600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<button class="icon-btn theme" id="theme" aria-label="Switch theme"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
+
+<section id="login" class="login" hidden>
+  <div class="stage"><div class="sigwrap"><div class="sig" role="img" aria-label="Dr. Gendy"></div><p>Medical lectures, protected and always in reach.</p></div></div>
+  <div class="side">
+    <form class="card" id="loginForm" autocomplete="off">
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in with your mobile number (or email) and password.</p>
+      <label>Mobile number or Email<input name="id" required placeholder="01012345678" autocomplete="username"></label>
+      <label>Password<input name="code" type="password" required autocomplete="current-password"></label>
+      <p class="err" id="loginErr" role="alert"></p>
+      <button class="btn" type="submit">Sign in</button>
+      <button class="btn ghost sm" type="button" id="toSignup" style="margin-top:10px;width:100%">New student? Create account</button>
+    </form>
+
+    <form class="card" id="signupForm" autocomplete="off" hidden>
+      <h1>Create account</h1>
+      <p class="muted">Enter your details to receive a 6-digit verification code by email.</p>
+      <label>Full name<input name="name" required minlength="2" placeholder="Ahmed Mohamed" autocomplete="name"></label>
+      <label>Mobile number<input name="phone" required inputmode="tel" placeholder="01012345678" autocomplete="tel"></label>
+      <label>Email address<input name="email" type="email" required placeholder="name@example.com" autocomplete="email"></label>
+      <label>Password<input name="password" type="password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"></label>
+      <p class="err" id="signupErr" role="alert"></p>
+      <button class="btn" type="submit" id="signupBtn">Send Verification Code</button>
+      <button class="btn ghost sm" type="button" id="toLogin" style="margin-top:10px;width:100%">Already have an account? Sign in</button>
+    </form>
+
+    <form class="card" id="otpForm" autocomplete="off" hidden>
+      <h1>Verify email</h1>
+      <p class="muted" id="otpSub">We sent a 6-digit code to your email. Check your inbox (and Spam folder).</p>
+      <label>6-digit verification code<input name="otp" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456"></label>
+      <p class="err" id="otpErr" role="alert"></p>
+      <button class="btn lime" type="submit" id="verifyBtn">Verify &amp; Activate</button>
+      <button class="btn ghost sm" type="button" id="resendOtp" style="margin-top:10px;width:100%">Resend Code</button>
+      <button class="btn ghost sm" type="button" id="otpBack" style="margin-top:8px;width:100%">Back to Sign Up</button>
+    </form>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <a class="brand" href="#/">Dr. Gendy</a>
+    <span class="grow"></span>
+    <span class="muted who" id="who"></span>
+    <button class="btn ghost sm" id="logout">Sign out</button>
+  </header>
+  <main>
+    <section id="home">
+      <div class="hero"><h1 id="hi"></h1><p class="muted">Pick a course to see its lectures.</p></div>
+      <div class="bar">
+        <label class="sel">Course
+          <select id="course"></select>
+        </label>
+        <input id="search" type="search" placeholder="Search lectures" aria-label="Search lectures">
+      </div>
+      <ul class="lectures" id="list"></ul>
+    </section>
+    <section id="lecture" hidden>
+      <a class="back" href="#/">‹ All lectures</a>
+      <h2 id="lTitle"></h2>
+      <p class="muted" id="lMeta"></p>
+      <div class="player" id="player"></div>
+      <div class="lnav"><button class="btn ghost sm" id="prev">Previous</button><button class="btn ghost sm" id="next">Next lecture</button></div>
+      <div class="panels">
+        <section class="panel" id="pdfBox"></section>
+        <section class="panel" id="quizBox"></section>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
