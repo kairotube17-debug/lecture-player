@@ -29,6 +29,7 @@ let adminData = null, adminTab = 'students';
 let googleClientId = '', googleInited = false;
 
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2400) };
+const hideToast = () => { const t = $('#toast'); if (t) { t.classList.remove('show'); t.textContent = ''; } };
 const fmt = s => { s = Math.max(0, s | 0); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s % 60).padStart(2, '0') };
 const auth = (extra = {}) => ({ headers: { Authorization: 'Bearer ' + (session?.token || ''), ...extra } });
 
@@ -101,7 +102,7 @@ async function handleGoogleCredential(resp) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (res.status === 403 && data.code === 'DEVICE_LIMIT') {
-        toast(DEVICE_LIMIT_MSG);
+        hideToast();
         throw new Error(DEVICE_LIMIT_MSG);
       }
       throw new Error(data.error || 'Google sign-in failed.');
@@ -168,7 +169,7 @@ async function initGoogleAuth() {
 
 /* sign in */
 $('#loginForm').onsubmit = async e => {
-  e.preventDefault(); const f = new FormData(e.target), err = $('#loginErr'); err.textContent = '';
+  e.preventDefault(); const f = new FormData(e.target), err = $('#loginErr'); err.textContent = ''; hideToast();
   const sid = String(f.get('id') || '').trim();
   const code = String(f.get('code') || '').trim();
   try {
@@ -187,7 +188,7 @@ $('#loginForm').onsubmit = async e => {
     sessionStorage.setItem('dg:s', JSON.stringify(session));
     if (session.role === 'admin') location.hash = '#/admin';
     boot();
-  } catch (x) { err.textContent = x.message || 'Could not sign in. Check your connection.' }
+  } catch (x) { hideToast(); err.textContent = x.message || 'Could not sign in. Check your connection.' }
 };
 
 /* sign up -> Brevo Email OTP */

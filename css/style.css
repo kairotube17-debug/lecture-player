@@ -112,7 +112,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radiu
 .qbar{height:5px;background:var(--line);border-radius:3px;margin-top:10px}.qbar i{display:block;height:100%;background:var(--lime);border-radius:3px;box-shadow:var(--glow);transition:width .25s}
 .score{font:700 3.4rem 'Bricolage Grotesque',sans-serif;margin:8px 0;color:var(--accent)}
 .rev{display:grid;gap:8px;margin:14px 0}.rev div{border:1px solid var(--line);border-radius:12px;padding:.75rem 1rem;font-size:.95rem;background:var(--bg)}
-.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:var(--lime);color:#000;font-weight:600;padding:.6rem 1.2rem;border-radius:999px;opacity:0;transition:.25s;pointer-events:none;z-index:50;box-shadow:var(--glow)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:var(--lime);color:#000;font-weight:600;padding:.6rem 1.2rem;border-radius:999px;opacity:0;transition:.25s;pointer-events:none;z-index:50;box-shadow:var(--glow);max-width:min(92vw,560px);text-align:center;line-height:1.4}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 @media(max-width:600px){.lec{grid-template-columns:40px 1fr}.lec .chips{grid-column:2}.num{width:40px;height:40px}.top .who{display:none}.vol{display:none}.bp{width:60px;height:60px}.cb{min-width:36px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
