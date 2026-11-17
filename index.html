@@ -14,6 +14,10 @@
   [data-theme="light"] .id-pill{color:#7d39eb;background:rgba(125,57,235,.08);border-color:rgba(125,57,235,.3)}
   .sub-banner{margin:12px 0 18px;padding:12px 16px;border-radius:12px;border:1px solid rgba(198,255,51,.35);background:rgba(198,255,51,.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px}
   [data-theme="light"] .sub-banner{border-color:rgba(125,57,235,.35);background:rgba(125,57,235,.08)}
+  .g-wrap{margin-top:14px;display:grid;justify-items:center;gap:8px}
+  .g-div{font-size:12px;opacity:.65}
+  .link-btn{background:none;border:none;color:var(--lime,#c6ff33);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 0;text-align:right;align-self:flex-end}
+  [data-theme="light"] .link-btn{color:#7d39eb}
   .adm-wrap{max-width:1100px;margin:0 auto;padding:10px 0 60px}
   .adm-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
   .adm-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:18px}
@@ -41,6 +45,7 @@
   .cms-row input,.cms-row select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,.15));background:transparent;color:inherit;font:inherit;box-sizing:border-box}
   .qb-q{padding:12px;border-radius:10px;border:1px solid var(--border,rgba(255,255,255,.1));margin:10px 0}
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <button class="icon-btn theme" id="theme" aria-label="Switch theme"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
@@ -53,9 +58,14 @@
       <p class="muted">Sign in with your Student ID (e.g. DG-1001) or Email and password.</p>
       <label>Student ID or Email<input name="id" required placeholder="DG-1001 or name@example.com" autocomplete="username"></label>
       <label>Password<input name="code" type="password" required autocomplete="current-password"></label>
+      <button class="link-btn" type="button" id="toForgot">Forgot password?</button>
       <p class="err" id="loginErr" role="alert"></p>
       <button class="btn" type="submit">Sign in</button>
-      <button class="btn ghost sm" type="button" id="toSignup" style="margin-top:10px;width:100%">New student? Create account</button>
+      <div class="g-wrap" id="gLoginWrap" hidden>
+        <span class="g-div muted">or</span>
+        <div id="gBtnLogin"></div>
+      </div>
+      <button class="btn ghost sm" type="button" id="toSignup" style="margin-top:12px;width:100%">New student? Create account</button>
     </form>
 
     <form class="card" id="signupForm" autocomplete="off" hidden>
@@ -66,7 +76,11 @@
       <label>Password<input name="password" type="password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"></label>
       <p class="err" id="signupErr" role="alert"></p>
       <button class="btn" type="submit" id="signupBtn">Send Verification Code</button>
-      <button class="btn ghost sm" type="button" id="toLogin" style="margin-top:10px;width:100%">Already have an account? Sign in</button>
+      <div class="g-wrap" id="gSignupWrap" hidden>
+        <span class="g-div muted">or</span>
+        <div id="gBtnSignup"></div>
+      </div>
+      <button class="btn ghost sm" type="button" id="toLogin" style="margin-top:12px;width:100%">Already have an account? Sign in</button>
     </form>
 
     <form class="card" id="otpForm" autocomplete="off" hidden>
@@ -77,6 +91,25 @@
       <button class="btn lime" type="submit" id="verifyBtn">Verify &amp; Get Student ID</button>
       <button class="btn ghost sm" type="button" id="resendOtp" style="margin-top:10px;width:100%">Resend Code</button>
       <button class="btn ghost sm" type="button" id="otpBack" style="margin-top:8px;width:100%">Back to Sign Up</button>
+    </form>
+
+    <form class="card" id="forgotForm" autocomplete="off" hidden>
+      <h1>Reset password</h1>
+      <p class="muted">Enter your registered email address to receive a 6-digit reset code.</p>
+      <label>Email address<input name="email" type="email" required placeholder="name@example.com" autocomplete="email"></label>
+      <p class="err" id="forgotErr" role="alert"></p>
+      <button class="btn" type="submit" id="forgotBtn">Send Reset Code</button>
+      <button class="btn ghost sm" type="button" id="forgotBack" style="margin-top:10px;width:100%">Back to Sign in</button>
+    </form>
+
+    <form class="card" id="resetForm" autocomplete="off" hidden>
+      <h1>Set new password</h1>
+      <p class="muted" id="resetSub">If that email is registered, a 6-digit code was sent. Check Inbox and Spam.</p>
+      <label>6-digit reset code<input name="code" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456"></label>
+      <label>New password<input name="newPassword" type="password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"></label>
+      <p class="err" id="resetErr" role="alert"></p>
+      <button class="btn lime" type="submit" id="resetBtn">Update Password</button>
+      <button class="btn ghost sm" type="button" id="resetBack" style="margin-top:10px;width:100%">Back</button>
     </form>
   </div>
 </section>

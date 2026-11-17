@@ -2,9 +2,13 @@
  * and protected Canvas/Watermark/Heartbeat player. */
 const CFG = {
   API: 'https://lecture-vod.bazabezo-ana.workers.dev',
+  CONFIG: '/api/config',
   SIGNUP: '/api/signup',
   RESEND_OTP: '/api/resend-otp',
   VERIFY_OTP: '/api/verify-otp',
+  FORGOT: '/api/forgot-password',
+  RESET: '/api/reset-password',
+  GOOGLE_AUTH: '/api/auth/google',
   LOGIN: '/api/login',
   CATALOG: '/api/catalog',
   PLAY: '/api/play/',
@@ -20,8 +24,9 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls = { get: k => { try { return localStorage.getItem(k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(k, v) } catch {} } };
 let session = JSON.parse(sessionStorage.getItem('dg:s') || 'null'), catalog = [], course = null, cleanup = null;
-let pendingEmail = '', resendTimer = 0;
+let pendingEmail = '', resetEmail = '', resendTimer = 0;
 let adminData = null, adminTab = 'students';
+let googleClientId = '', googleInited = false;
 
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2400) };
 const fmt = s => { s = Math.max(0, s | 0); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s % 60).padStart(2, '0') };
@@ -50,7 +55,9 @@ function showAuthCard(which) {
   $('#loginForm').hidden = which !== 'login';
   $('#signupForm').hidden = which !== 'signup';
   $('#otpForm').hidden = which !== 'otp';
-  $('#loginErr').textContent = $('#signupErr').textContent = $('#otpErr').textContent = '';
+  $('#forgotForm').hidden = which !== 'forgot';
+  $('#resetForm').hidden = which !== 'reset';
+  $('#loginErr').textContent = $('#signupErr').textContent = $('#otpErr').textContent = $('#forgotErr').textContent = $('#resetErr').textContent = '';
 }
 function startResendCooldown(sec = 60) {
   clearInterval(resendTimer);
@@ -66,6 +73,74 @@ function startResendCooldown(sec = 60) {
 $('#toSignup').onclick = () => showAuthCard('signup');
 $('#toLogin').onclick = () => showAuthCard('login');
 $('#otpBack').onclick = () => { clearInterval(resendTimer); showAuthCard('signup'); };
+$('#toForgot').onclick = () => showAuthCard('forgot');
+$('#forgotBack').onclick = () => showAuthCard('login');
+$('#resetBack').onclick = () => showAuthCard('forgot');
+
+/* Google Sign-In */
+function showVisibleAuthErr(msg) {
+  if (!$('#signupForm').hidden) $('#signupErr').textContent = msg;
+  else $('#loginErr').textContent = msg;
+}
+async function handleGoogleCredential(resp) {
+  if (!resp || !resp.credential) return;
+  showVisibleAuthErr('');
+  try {
+    const res = await fetch(CFG.API + CFG.GOOGLE_AUTH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: resp.credential }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 403 && data.code === 'DEVICE_LIMIT') {
+        toast(DEVICE_LIMIT_MSG);
+        throw new Error(DEVICE_LIMIT_MSG);
+      }
+      throw new Error(data.error || 'Google sign-in failed.');
+    }
+    session = {
+      token: data.token, id: data.id, name: data.name, email: data.email || '',
+      role: data.role || 'student', status: data.status || 'inactive', freeAccess: !!data.freeAccess,
+    };
+    sessionStorage.setItem('dg:s', JSON.stringify(session));
+    toast(`Signed in as ${session.id}`);
+    boot();
+  } catch (x) {
+    showVisibleAuthErr(x.message || 'Could not sign in with Google.');
+  }
+}
+function renderGoogleButtons() {
+  if (!googleClientId || !window.google?.accounts?.id) return;
+  if (!googleInited) {
+    window.google.accounts.id.initialize({ client_id: googleClientId, callback: handleGoogleCredential });
+    googleInited = true;
+  }
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'filled_black' : 'outline';
+  for (const [wrapId, btnId] of [['#gLoginWrap', '#gBtnLogin'], ['#gSignupWrap', '#gBtnSignup']]) {
+    const wrap = $(wrapId), btn = $(btnId);
+    if (!wrap || !btn) continue;
+    wrap.hidden = false;
+    btn.innerHTML = '';
+    window.google.accounts.id.renderButton(btn, { theme, size: 'large', text: 'continue_with', width: 280, shape: 'pill' });
+  }
+}
+async function initGoogleAuth() {
+  if (!CFG.API) return;
+  try {
+    const res = await fetch(CFG.API + CFG.CONFIG);
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    googleClientId = String(data.googleClientId || '').trim();
+    if (!googleClientId) return;
+    let tries = 0;
+    const waitGsi = () => {
+      if (window.google?.accounts?.id) renderGoogleButtons();
+      else if (++tries < 60) setTimeout(waitGsi, 150);
+    };
+    waitGsi();
+  } catch {}
+}
 
 /* sign in */
 $('#loginForm').onsubmit = async e => {
@@ -78,7 +153,7 @@ $('#loginForm').onsubmit = async e => {
       const res = await fetch(CFG.API + CFG.LOGIN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: sid, code }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (res.status === 401) throw new Error('Wrong Student ID/Email or password.');
+        if (res.status === 401) throw new Error(data.error || 'Wrong Student ID/Email or password.');
         if (res.status === 403 && data.code === 'DEVICE_LIMIT') throw new Error(DEVICE_LIMIT_MSG);
         throw new Error(data.error || 'Server error. Try again.');
       }
@@ -152,6 +227,47 @@ $('#otpForm').onsubmit = async e => {
     boot();
   } catch (x) { err.textContent = x.message || 'Verification failed.'; }
   finally { btn.disabled = false; btn.textContent = 'Verify & Get Student ID'; }
+};
+
+/* forgot password -> step 1: request OTP */
+$('#forgotForm').onsubmit = async e => {
+  e.preventDefault(); const f = new FormData(e.target), err = $('#forgotErr'), btn = $('#forgotBtn');
+  err.textContent = '';
+  const email = String(f.get('email') || '').trim();
+  btn.disabled = true; btn.textContent = 'Sending...';
+  try {
+    const res = await fetch(CFG.API + CFG.FORGOT, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not send reset code.');
+    resetEmail = email;
+    $('#resetSub').textContent = `If ${email} is registered, a 6-digit code was sent. Check Inbox and Spam.`;
+    showAuthCard('reset');
+  } catch (x) { err.textContent = x.message || 'Request failed.'; }
+  finally { btn.disabled = false; btn.textContent = 'Send Reset Code'; }
+};
+
+/* forgot password -> step 2: verify OTP & set new password */
+$('#resetForm').onsubmit = async e => {
+  e.preventDefault(); const f = new FormData(e.target), err = $('#resetErr'), btn = $('#resetBtn');
+  err.textContent = '';
+  const code = String(f.get('code') || '').trim();
+  const newPassword = String(f.get('newPassword') || '');
+  btn.disabled = true; btn.textContent = 'Updating...';
+  try {
+    const res = await fetch(CFG.API + CFG.RESET, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: resetEmail, code, newPassword })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Reset failed.');
+    e.target.reset();
+    showAuthCard('login');
+    const idInput = $('#loginForm input[name="id"]');
+    if (idInput && resetEmail) idInput.value = resetEmail;
+    toast('Password updated! You can now sign in.');
+  } catch (x) { err.textContent = x.message || 'Could not update password.'; }
+  finally { btn.disabled = false; btn.textContent = 'Update Password'; }
 };
 
 $('#logout').onclick = () => { sessionStorage.removeItem('dg:s'); session = null; adminData = null; location.hash = '#/'; showAuthCard('login'); boot() };
@@ -1068,4 +1184,5 @@ function mountPlayer(box, playData, l, nextLec, errMessage = '') {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   };
 }
+initGoogleAuth();
 boot();
