@@ -58,6 +58,7 @@ function showAuthCard(which) {
   $('#forgotForm').hidden = which !== 'forgot';
   $('#resetForm').hidden = which !== 'reset';
   $('#loginErr').textContent = $('#signupErr').textContent = $('#otpErr').textContent = $('#forgotErr').textContent = $('#resetErr').textContent = '';
+  if (which === 'login' || which === 'signup') renderGoogleButtons();
 }
 function startResendCooldown(sec = 60) {
   clearInterval(resendTimer);
@@ -110,19 +111,36 @@ async function handleGoogleCredential(resp) {
     showVisibleAuthErr(x.message || 'Could not sign in with Google.');
   }
 }
+function getGoogleButtonWidth() {
+  const candidates = [$('#loginForm button[type="submit"]'), $('#signupBtn')];
+  for (const el of candidates) {
+    if (!el) continue;
+    const w = Math.round(el.getBoundingClientRect().width);
+    if (w >= 180) return Math.min(400, Math.max(200, w));
+  }
+  return 340;
+}
 function renderGoogleButtons() {
   if (!googleClientId || !window.google?.accounts?.id) return;
   if (!googleInited) {
     window.google.accounts.id.initialize({ client_id: googleClientId, callback: handleGoogleCredential });
     googleInited = true;
   }
-  const theme = document.documentElement.dataset.theme === 'dark' ? 'filled_black' : 'outline';
+  const btnWidth = getGoogleButtonWidth();
+  const opts = {
+    theme: 'filled_black',
+    shape: 'pill',
+    size: 'large',
+    text: 'continue_with',
+    locale: 'en',
+    width: btnWidth,
+  };
   for (const [wrapId, btnId] of [['#gLoginWrap', '#gBtnLogin'], ['#gSignupWrap', '#gBtnSignup']]) {
     const wrap = $(wrapId), btn = $(btnId);
     if (!wrap || !btn) continue;
     wrap.hidden = false;
     btn.innerHTML = '';
-    window.google.accounts.id.renderButton(btn, { theme, size: 'large', text: 'continue_with', width: 280, shape: 'pill' });
+    window.google.accounts.id.renderButton(btn, opts);
   }
 }
 async function initGoogleAuth() {
@@ -298,7 +316,7 @@ function renderStudentStatusBanner() {
 
 async function boot() {
   $('#login').hidden = !!session; $('#app').hidden = !session;
-  if (!session) return;
+  if (!session) { renderGoogleButtons(); return; }
   $('#who').textContent = session.name;
   $('#hi').textContent = 'Welcome, ' + session.name;
   $('#adminBtn').hidden = session.role !== 'admin';
@@ -1184,5 +1202,5 @@ function mountPlayer(box, playData, l, nextLec, errMessage = '') {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   };
 }
-initGoogleAuth();
 boot();
+initGoogleAuth();
