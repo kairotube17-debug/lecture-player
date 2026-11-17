@@ -32,6 +32,12 @@ const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('
 const fmt = s => { s = Math.max(0, s | 0); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s % 60).padStart(2, '0') };
 const auth = (extra = {}) => ({ headers: { Authorization: 'Bearer ' + (session?.token || ''), ...extra } });
 
+const isSafariNative = () => {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return /Safari\//.test(ua) && /Version\//.test(ua) && !/(Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPiOS|Android)/i.test(ua);
+};
+
 /* Stable per-tab client id: binds /api/play, /heartbeat and the /vod/<token>/<exp>/<slug>/<sid>/<cid>/... path. */
 const CID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const CLIENT_CID = (() => {
@@ -392,7 +398,11 @@ async function openLecture(c, l) {
   let playErr = '';
   if (CFG.API) {
     try {
-      const res = await fetch(CFG.API + CFG.PLAY + encodeURIComponent(l.id) + '?cid=' + encodeURIComponent(CLIENT_CID), auth({ 'X-Client-Id': CLIENT_CID }));
+      const reqEngine = (!isSafariNative() && window.Hls && Hls.isSupported()) ? 'hls' : 'native';
+      const res = await fetch(
+        CFG.API + CFG.PLAY + encodeURIComponent(l.id) + '?cid=' + encodeURIComponent(CLIENT_CID) + '&engine=' + reqEngine,
+        auth({ 'X-Client-Id': CLIENT_CID })
+      );
       if (res.status === 401) return $('#logout').click();
       const body = await res.json().catch(() => ({}));
       if (res.ok) playData = body;
