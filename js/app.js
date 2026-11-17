@@ -12,6 +12,7 @@ const CFG = {
   LOGIN: '/api/login',
   CATALOG: '/api/catalog',
   PLAY: '/api/play/',
+  STREAM_PING: '/api/stream/ping',
   PDF: '/api/pdf/',
   QUIZ_SUBMIT: '/api/quiz-submit',
   ADMIN_OVERVIEW: '/api/admin/overview',
@@ -53,6 +54,19 @@ const CLIENT_CID = (() => {
   return id;
 })();
 const DEVICE_LIMIT_MSG = 'Device limit reached: this account is active on 2 devices. Contact the administration to reset your devices. \u2014 \u0648\u0635\u0644 \u062d\u0633\u0627\u0628\u0643 \u0644\u0644\u062d\u062f \u0627\u0644\u0623\u0642\u0635\u0649 (\u062c\u0647\u0627\u0632\u0627\u0646)\u060c \u062a\u0648\u0627\u0635\u0644 \u0645\u0639 \u0627\u0644\u0625\u062f\u0627\u0631\u0629 \u0644\u0625\u0639\u0627\u062f\u0629 \u0636\u0628\u0637 \u0627\u0644\u0623\u062c\u0647\u0632\u0629.';
+const STREAM_CONFLICT_MSG = 'الحساب مشغّل محاضرة حالياً على جهازك الآخر — أوقف التشغيل هناك أولاً';
+function getDeviceInfo() {
+  let deviceId = '';
+  try { deviceId = localStorage.getItem('dg:devid') || ''; } catch {}
+  if (!CID_RE.test(deviceId)) {
+    const bytes = new Uint8Array(16);
+    (globalThis.crypto?.getRandomValues ? globalThis.crypto : { getRandomValues: a => { for (let i = 0; i < a.length; i++) a[i] = Math.random() * 256 | 0; return a; } }).getRandomValues(bytes);
+    deviceId = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    try { localStorage.setItem('dg:devid', deviceId); } catch {}
+  }
+  const scr = `${window.screen?.width || 0}x${window.screen?.height || 0}x${window.screen?.colorDepth || 24}`;
+  return { deviceId, screen: scr };
+}
 
 /* theme */
 $('#theme').onclick = () => { const d = document.documentElement, n = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = n; ls.set('dg:theme', n) };
@@ -97,7 +111,7 @@ async function handleGoogleCredential(resp) {
     const res = await fetch(CFG.API + CFG.GOOGLE_AUTH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: resp.credential }),
+      body: JSON.stringify({ credential: resp.credential, ...getDeviceInfo() }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -175,7 +189,7 @@ $('#loginForm').onsubmit = async e => {
   try {
     let r = { token: 'demo', id: sid, name: sid, role: 'student', status: 'active', freeAccess: false };
     if (CFG.API) {
-      const res = await fetch(CFG.API + CFG.LOGIN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: sid, code }) });
+      const res = await fetch(CFG.API + CFG.LOGIN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: sid, code, ...getDeviceInfo() }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (res.status === 401) throw new Error(data.error || 'Wrong Student ID/Email or password.');
@@ -241,7 +255,7 @@ $('#otpForm').onsubmit = async e => {
   btn.disabled = true; btn.textContent = 'Verifying...';
   try {
     const res = await fetch(CFG.API + CFG.VERIFY_OTP, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: pendingEmail, otp })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: pendingEmail, otp, ...getDeviceInfo() })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Invalid or expired OTP.');
@@ -399,15 +413,17 @@ async function openLecture(c, l) {
   let playErr = '';
   if (CFG.API) {
     try {
+      const dev = getDeviceInfo();
       const reqEngine = (!isSafariNative() && window.Hls && Hls.isSupported()) ? 'hls' : 'native';
-      const res = await fetch(
-        CFG.API + CFG.PLAY + encodeURIComponent(l.id) + '?cid=' + encodeURIComponent(CLIENT_CID) + '&engine=' + reqEngine,
-        auth({ 'X-Client-Id': CLIENT_CID })
-      );
+      const qs = new URLSearchParams({ cid: CLIENT_CID, engine: reqEngine, deviceId: dev.deviceId, screen: dev.screen });
+      const res = await fetch(CFG.API + CFG.PLAY + encodeURIComponent(l.id) + '?' + qs.toString(), auth({ 'X-Client-Id': CLIENT_CID }));
       if (res.status === 401) return $('#logout').click();
       const body = await res.json().catch(() => ({}));
       if (res.ok) playData = body;
-      else { playData = null; playErr = body.error || 'Video unavailable.'; }
+      else {
+        playData = null;
+        playErr = (res.status === 409 && body.code === 'STREAM_ACTIVE') ? STREAM_CONFLICT_MSG : (body.error || 'Video unavailable.');
+      }
     } catch { playData = null; playErr = 'Connection error.'; }
   }
   if (location.hash.indexOf(encodeURIComponent(l.id)) < 0) return;
@@ -1145,8 +1161,33 @@ function mountPlayer(box, playData, l, nextLec, errMessage = '') {
   const upd = () => { const d = v.duration || 0; $$('#seek').value = d ? v.currentTime / d * 1000 : 0; $$('#seek').style.setProperty('--p', (d ? v.currentTime / d * 100 : 0) + '%'); $$('#tm').textContent = fmt(v.currentTime) + ' / ' + fmt(d) };
   v.ontimeupdate = () => { upd(); if (Date.now() - last > 4000 && v.duration) { last = Date.now(); ls.set(key, v.currentTime); ls.set('dg:prog:' + l.id, v.currentTime / v.duration) } };
   const tog = () => { if (halted || isBlackout) return; v.paused ? v.play().catch(() => {}) : v.pause() };
-  v.onplay = () => { box.classList.add('playing'); $$('#pp').setAttribute('aria-label', 'Pause') };
-  v.onpause = () => { box.classList.remove('playing'); $$('#pp').setAttribute('aria-label', 'Play') };
+  let streamTimer = 0;
+  async function sendStreamPing() {
+    if (halted || isBlackout || !CFG.API || !session?.token) return;
+    try {
+      const r = await fetch(CFG.API + CFG.STREAM_PING, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.token },
+        body: JSON.stringify({ cid: CID, slug: l.id }),
+      });
+      if (r.status === 409) {
+        const d = await r.json().catch(() => ({}));
+        return halt(d.error || STREAM_CONFLICT_MSG);
+      }
+      if (r.status === 403) return halt('account suspended');
+    } catch {}
+  }
+  const startStreamPing = () => {
+    clearInterval(streamTimer);
+    if (!halted && CFG.API) {
+      sendStreamPing();
+      streamTimer = setInterval(sendStreamPing, 10000);
+    }
+  };
+  const stopStreamPing = () => { clearInterval(streamTimer); streamTimer = 0; };
+
+  v.onplay = () => { box.classList.add('playing'); $$('#pp').setAttribute('aria-label', 'Pause'); startStreamPing(); };
+  v.onpause = () => { box.classList.remove('playing'); $$('#pp').setAttribute('aria-label', 'Play'); stopStreamPing(); };
   v.onended = () => { ls.set('dg:prog:' + l.id, 1); if (nextLec) toast('Next: ' + nextLec.title) };
 
   v.onclick = () => { if (box.classList.contains('idle')) wake(); else tog(); };
@@ -1209,6 +1250,7 @@ function mountPlayer(box, playData, l, nextLec, errMessage = '') {
     vv && vv.removeEventListener('resize', onVV);
     document.removeEventListener('visibilitychange', onVis); document.removeEventListener('fullscreenchange', syncFsStyles);
     clearInterval(wt); clearInterval(checkTimer); clearTimeout(beatTimer); clearTimeout(shotTimer); clearTimeout(idle); clearTimeout(vvTimer);
+    stopStreamPing();
     engine.destroy(); v.removeAttribute('src'); v.load(); box.innerHTML = ''; box.style.cssText = '';
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   };
