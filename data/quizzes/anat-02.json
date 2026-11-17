@@ -1,5 +1,0 @@
-{ "questions": [
-  { "q": "How many vertebrae are in the cervical spine?", "options": ["5", "7", "12", "4"], "answer": 1, "explain": "There are 7 cervical vertebrae (C1–C7)." },
-  { "q": "The atlas is which vertebra?", "options": ["C2", "C7", "C1", "T1"], "answer": 2, "explain": "C1 is the atlas; it carries the skull." },
-  { "q": "Which bone forms the forehead?", "options": ["Parietal", "Frontal", "Temporal", "Occipital"], "answer": 1, "explain": "The frontal bone forms the forehead and the roof of the orbits." }
-] }

@@ -9,11 +9,11 @@
           "hls": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
           "pdf": "pdfs/anat-01.pdf",
           "quiz": { "questions": [
-            { "q": "Which plane divides the body into right and left halves?", "options": ["Sagittal", "Coronal", "Transverse", "Oblique"], "answer": 0, "explain": "The sagittal plane runs front-to-back, splitting right from left." },
-            { "q": "'Distal' means:", "options": ["Closer to the trunk", "Farther from the point of attachment", "Toward the back", "Toward the midline"], "answer": 1, "explain": "Distal = farther from the origin of a limb." }
+            { "q": "Which plane divides the body into right and left halves?", "options": ["Sagittal", "Coronal", "Transverse", "Oblique"] },
+            { "q": "'Distal' means:", "options": ["Closer to the trunk", "Farther from the point of attachment", "Toward the back", "Toward the midline"] }
           ] } },
         { "id": "anat-02", "title": "Osteology: Axial Skeleton", "duration": 64, "status": "published", "hls": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "pdf": null,
-          "quiz": "data/quizzes/anat-02.json" },
+          "quiz": null },
         { "id": "anat-03", "title": "Joints and Ligaments", "duration": 48, "status": "published", "hls": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "pdf": "pdfs/anat-03.pdf", "quiz": null },
         { "id": "anat-04", "title": "Muscular System Overview", "duration": null, "status": "soon", "hls": null, "pdf": null, "quiz": null }
       ]

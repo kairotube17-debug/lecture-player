@@ -4,10 +4,43 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dr. Gendy</title>
+<link rel="icon" href="data:,">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('dg:theme')||'dark'}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans+Arabic:wght@400;600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<style id="dg-ext-css">
+  .id-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--border,rgba(255,255,255,.14));background:var(--panel,rgba(255,255,255,.06));color:var(--lime,#c6ff33);font-size:12px;font-weight:700;cursor:pointer}
+  [data-theme="light"] .id-pill{color:#7d39eb;background:rgba(125,57,235,.08);border-color:rgba(125,57,235,.3)}
+  .sub-banner{margin:12px 0 18px;padding:12px 16px;border-radius:12px;border:1px solid rgba(198,255,51,.35);background:rgba(198,255,51,.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px}
+  [data-theme="light"] .sub-banner{border-color:rgba(125,57,235,.35);background:rgba(125,57,235,.08)}
+  .adm-wrap{max-width:1100px;margin:0 auto;padding:10px 0 60px}
+  .adm-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .adm-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:18px}
+  .kpi{padding:14px 16px;border-radius:14px;border:1px solid var(--border,rgba(255,255,255,.1));background:var(--panel,rgba(255,255,255,.03))}
+  .kpi b{display:block;font-size:24px;margin-top:4px;color:var(--lime,#c6ff33)}
+  [data-theme="light"] .kpi b{color:#7d39eb}
+  .adm-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .adm-tabs .btn.active{background:var(--lime,#c6ff33);color:#000;border-color:var(--lime,#c6ff33)}
+  [data-theme="light"] .adm-tabs .btn.active{background:#7d39eb;color:#fff;border-color:#7d39eb}
+  .adm-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .adm-bar input,.adm-bar select{padding:8px 12px;border-radius:10px;border:1px solid var(--border,rgba(255,255,255,.15));background:transparent;color:inherit;font:inherit}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:14px}
+  .adm-tbl{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
+  .adm-tbl th,.adm-tbl td{padding:10px 12px;border-bottom:1px solid var(--border,rgba(255,255,255,.08));vertical-align:middle}
+  .adm-tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.6px;opacity:.7}
+  .tag-st{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .st-active{background:rgba(34,197,94,.16);color:#4ade80}
+  .st-inactive{background:rgba(250,204,21,.16);color:#facc15}
+  .st-banned{background:rgba(248,113,113,.16);color:#f87171}
+  [data-theme="light"] .st-active{color:#15803d} [data-theme="light"] .st-inactive{color:#a16207} [data-theme="light"] .st-banned{color:#b91c1c}
+  .adm-acts{display:flex;gap:6px;flex-wrap:wrap}
+  .cms-grid{display:grid;gap:16px}
+  .cms-card{padding:16px;border-radius:14px;border:1px solid var(--border,rgba(255,255,255,.12));background:var(--panel,rgba(255,255,255,.03))}
+  .cms-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:8px 0}
+  .cms-row input,.cms-row select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,.15));background:transparent;color:inherit;font:inherit;box-sizing:border-box}
+  .qb-q{padding:12px;border-radius:10px;border:1px solid var(--border,rgba(255,255,255,.1));margin:10px 0}
+</style>
 </head>
 <body>
 <button class="icon-btn theme" id="theme" aria-label="Switch theme"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
@@ -17,8 +50,8 @@
   <div class="side">
     <form class="card" id="loginForm" autocomplete="off">
       <h1>Welcome back</h1>
-      <p class="muted">Sign in with your mobile number (or email) and password.</p>
-      <label>Mobile number or Email<input name="id" required placeholder="01012345678" autocomplete="username"></label>
+      <p class="muted">Sign in with your Student ID (e.g. DG-1001) or Email and password.</p>
+      <label>Student ID or Email<input name="id" required placeholder="DG-1001 or name@example.com" autocomplete="username"></label>
       <label>Password<input name="code" type="password" required autocomplete="current-password"></label>
       <p class="err" id="loginErr" role="alert"></p>
       <button class="btn" type="submit">Sign in</button>
@@ -27,9 +60,8 @@
 
     <form class="card" id="signupForm" autocomplete="off" hidden>
       <h1>Create account</h1>
-      <p class="muted">Enter your details to receive a 6-digit verification code by email.</p>
+      <p class="muted">Register with your email to get your personal Student ID.</p>
       <label>Full name<input name="name" required minlength="2" placeholder="Ahmed Mohamed" autocomplete="name"></label>
-      <label>Mobile number<input name="phone" required inputmode="tel" placeholder="01012345678" autocomplete="tel"></label>
       <label>Email address<input name="email" type="email" required placeholder="name@example.com" autocomplete="email"></label>
       <label>Password<input name="password" type="password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"></label>
       <p class="err" id="signupErr" role="alert"></p>
@@ -42,7 +74,7 @@
       <p class="muted" id="otpSub">We sent a 6-digit code to your email. Check your inbox (and Spam folder).</p>
       <label>6-digit verification code<input name="otp" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456"></label>
       <p class="err" id="otpErr" role="alert"></p>
-      <button class="btn lime" type="submit" id="verifyBtn">Verify &amp; Activate</button>
+      <button class="btn lime" type="submit" id="verifyBtn">Verify &amp; Get Student ID</button>
       <button class="btn ghost sm" type="button" id="resendOtp" style="margin-top:10px;width:100%">Resend Code</button>
       <button class="btn ghost sm" type="button" id="otpBack" style="margin-top:8px;width:100%">Back to Sign Up</button>
     </form>
@@ -53,12 +85,15 @@
   <header class="top">
     <a class="brand" href="#/">Dr. Gendy</a>
     <span class="grow"></span>
+    <button class="id-pill" id="idPill" type="button" title="Copy Student ID" hidden></button>
+    <button class="btn lime sm" id="adminBtn" type="button" hidden>Admin Panel</button>
     <span class="muted who" id="who"></span>
     <button class="btn ghost sm" id="logout">Sign out</button>
   </header>
   <main>
     <section id="home">
       <div class="hero"><h1 id="hi"></h1><p class="muted">Pick a course to see its lectures.</p></div>
+      <div id="subBanner" class="sub-banner" hidden></div>
       <div class="bar">
         <label class="sel">Course
           <select id="course"></select>
@@ -67,6 +102,7 @@
       </div>
       <ul class="lectures" id="list"></ul>
     </section>
+
     <section id="lecture" hidden>
       <a class="back" href="#/">‹ All lectures</a>
       <h2 id="lTitle"></h2>
@@ -78,10 +114,12 @@
         <section class="panel" id="quizBox"></section>
       </div>
     </section>
+
+    <section id="adminView" class="adm-wrap" hidden></section>
   </main>
 </div>
 <div class="toast" id="toast" role="status"></div>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" integrity="sha384-9v3HcdYrO3D+OPDTjZ40RXocgE4GtXVCd3/mCS62JsM93JXgI1afJVuwjFvsu6ni" crossorigin="anonymous"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
