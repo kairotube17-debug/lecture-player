@@ -27,8 +27,8 @@ button,input,select{font:inherit;color:inherit}
 .sig{width:100%;aspect-ratio:1400/788;background:var(--lime);-webkit-mask:url(../assets/signature.png) center/contain no-repeat;mask:url(../assets/signature.png) center/contain no-repeat}
 .sigwrap p{margin:6px 0 0;color:rgba(255,255,255,.78);filter:none}
 .side{display:grid;place-items:center;padding:40px 24px}
-.card{position:relative;width:min(420px,100%);background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--line);border-radius:24px;padding:36px 32px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--card);box-sizing:border-box}
-.card::before{content:"";position:absolute;top:-1px;left:-1px;right:-1px;height:3px;background:linear-gradient(90deg,var(--lime),var(--violet));border-radius:24px 24px 0 0;pointer-events:none}
+.card{position:relative;overflow:hidden;width:min(420px,100%);background:linear-gradient(160deg,var(--surface2),var(--surface));border:1px solid var(--line);border-radius:24px;padding:36px 32px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--card);box-sizing:border-box}
+.card::before{content:"";position:absolute;top:0;left:0;right:0;width:100%;height:3px;background:linear-gradient(90deg,var(--lime),var(--violet));pointer-events:none}
 .card h1{margin:0 0 2px;font-size:1.65rem;font-weight:700;line-height:1.2}
 .card p.muted{margin:0 0 6px;font-size:.9rem;line-height:1.45}
 .card label{display:flex;flex-direction:column;gap:6px;width:100%;box-sizing:border-box;font-size:.88rem;color:var(--muted)}
