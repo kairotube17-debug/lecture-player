@@ -79,6 +79,11 @@ function showAuthCard(which) {
   $('#forgotForm').hidden = which !== 'forgot';
   $('#resetForm').hidden = which !== 'reset';
   $('#loginErr').textContent = $('#signupErr').textContent = $('#otpErr').textContent = $('#forgotErr').textContent = $('#resetErr').textContent = '';
+  document.querySelectorAll('.pw-wrap').forEach(w => {
+    const inp = w.querySelector('input'), btn = w.querySelector('.pw-eye');
+    if (inp) inp.type = 'password';
+    if (btn) { btn.setAttribute('aria-pressed', 'false'); btn.setAttribute('aria-label', 'Show password'); }
+  });
   if (which === 'login' || which === 'signup') renderGoogleButtons();
 }
 function startResendCooldown(sec = 60) {
@@ -98,6 +103,18 @@ $('#otpBack').onclick = () => { clearInterval(resendTimer); showAuthCard('signup
 $('#toForgot').onclick = () => showAuthCard('forgot');
 $('#forgotBack').onclick = () => showAuthCard('login');
 $('#resetBack').onclick = () => showAuthCard('forgot');
+
+document.querySelectorAll('.pw-eye').forEach(btn => {
+  btn.onclick = () => {
+    const inp = btn.closest('.pw-wrap')?.querySelector('input');
+    if (!inp) return;
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    btn.setAttribute('aria-pressed', String(show));
+    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    inp.focus({ preventScroll: true });
+  };
+});
 
 /* Google Sign-In */
 function showVisibleAuthErr(msg) {
