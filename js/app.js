@@ -413,7 +413,7 @@ function renderList() {
     return `<li class="lec ${on ? '' : 'off'} ${p > .9 ? 'done' : ''}" ${on ? `tabindex="0" data-id="${esc(l.id)}"` : 'aria-disabled="true"'}>
       <div class="num">${p > .9 ? '✓' : i + 1}</div>
       <div><h3>${esc(l.title)}</h3><div class="sub">${on ? (l.duration ? l.duration + ' min' : '') + (p > .02 && p <= .9 ? ' \u00b7 ' + Math.round(p * 100) + '% watched' : '') : 'Coming soon'}</div></div>
-      <div class="chips"><span class="chip ${has(l.hasPdf ?? l.pdf)}">PDF</span><span class="chip ${has(l.quiz)}">Quiz</span></div>
+      <div class="chips"><span class="chip ${has(l.hasPdf ?? l.pdf)}">PDF</span><span class="chip ${has(l.quizHtml || l.quiz)}">Quiz</span></div>
       ${on && p > .02 ? `<i class="prog" style="width:${Math.round(p * 100)}%"></i>` : ''}</li>`;
   }).join('') : '<li class="empty">No lectures found.</li>';
 }
@@ -473,12 +473,32 @@ async function renderPdf(l) {
   };
 }
 
-/* quiz (anti-cheat: answers live ONLY on server and are returned after submission) */
+/* quiz (HTML iframe sandbox OR legacy JSON quiz) */
 async function renderQuiz(l) {
-  const b = $('#quizBox'); let data = l.quiz;
+  const b = $('#quizBox');
+  const head = (sub, btn) => `<div class="phead"><div><h3>Quiz</h3><span class="muted">${sub}</span></div>${btn}</div>`;
+
+  if (l.quizHtml) {
+    b.classList.remove('off');
+    let opened = false;
+    const drawHtml = () => {
+      if (!opened) {
+        b.innerHTML = head('Interactive lecture quiz.', '<button class="btn lime" id="qsHtml">Start Quiz</button>');
+        $('#qsHtml').onclick = () => { opened = true; drawHtml(); };
+      } else {
+        b.innerHTML = head('Interactive lecture quiz.', '<button class="btn ghost sm" id="qsClose">Close Quiz</button>') +
+          '<iframe id="quizFrame" sandbox="allow-scripts" style="width:100%;height:560px;border:1px solid var(--line);border-radius:14px;background:#fff;margin-top:14px"></iframe>';
+        $('#quizFrame').srcdoc = l.quizHtml;
+        $('#qsClose').onclick = () => { opened = false; drawHtml(); };
+      }
+    };
+    drawHtml();
+    return;
+  }
+
+  let data = l.quiz;
   if (typeof data === 'string') { try { data = await (await fetch(data)).json() } catch { data = null } }
   const qs = data?.questions || []; b.classList.toggle('off', !qs.length);
-  const head = (sub, btn) => `<div class="phead"><div><h3>Quiz</h3><span class="muted">${sub}</span></div>${btn}</div>`;
   if (!qs.length) return b.innerHTML = head('Not available yet.', '<button class="btn" disabled>Start quiz</button>');
 
   let i, ans;
@@ -571,17 +591,16 @@ async function loadAdmin() {
 function renderAdmin() {
   const v = $('#adminView');
   if (!adminData) return;
+  if (adminTab !== 'students' && adminTab !== 'cms') adminTab = 'students';
   const students = adminData.students || [];
   const courses = adminData.courses || [];
-  const scores = adminData.scores || [];
-  const alerts = adminData.alerts || [];
   const activeCount = students.filter(s => s.status === 'active').length;
   const bannedCount = students.filter(s => s.status === 'banned').length;
   const pubCount = courses.reduce((n, c) => n + (c.lectures || []).filter(l => l.status === 'published').length, 0);
 
   v.innerHTML = `
     <div class="adm-top">
-      <div><h2>Dr. Gendy — Admin Panel</h2><p class="muted">Students, subscriptions, CMS, quizzes, grades &amp; security</p></div>
+      <div><h2>Dr. Gendy — Admin Panel</h2><p class="muted">Students, subscriptions &amp; courses management</p></div>
       <div class="adm-acts">
         <button id="toggleFree" class="btn ${adminData.freeAccess ? 'lime' : 'ghost'}">${adminData.freeAccess ? '🟢 وضع ليلة الامتحان: مفعّل (Free Access ON)' : '⚪ وضع ليلة الامتحان: مغلق (Paid Only)'}</button>
         <button id="admRefresh" class="btn ghost sm">Refresh</button>
@@ -592,14 +611,10 @@ function renderAdmin() {
       <div class="kpi"><span class="muted">Active Subs</span><b>${activeCount}</b></div>
       <div class="kpi"><span class="muted">Banned</span><b>${bannedCount}</b></div>
       <div class="kpi"><span class="muted">Published Lecs</span><b>${pubCount}</b></div>
-      <div class="kpi"><span class="muted">Quiz Results</span><b>${scores.length}</b></div>
-      <div class="kpi"><span class="muted">Security Alerts</span><b>${alerts.length}</b></div>
     </div>
     <div class="adm-tabs">
       <button class="btn ghost sm ${adminTab === 'students' ? 'active' : ''}" data-tab="students">Students (${students.length})</button>
       <button class="btn ghost sm ${adminTab === 'cms' ? 'active' : ''}" data-tab="cms">Courses &amp; Quizzes</button>
-      <button class="btn ghost sm ${adminTab === 'scores' ? 'active' : ''}" data-tab="scores">Grades (${scores.length})</button>
-      <button class="btn ghost sm ${adminTab === 'alerts' ? 'active' : ''}" data-tab="alerts">Security Alerts (${alerts.length})</button>
     </div>
     <div id="admBody"></div>`;
 
@@ -612,9 +627,7 @@ function renderAdmin() {
   };
 
   if (adminTab === 'students') renderAdminStudents();
-  else if (adminTab === 'cms') renderAdminCms();
-  else if (adminTab === 'scores') renderAdminScores();
-  else renderAdminAlerts();
+  else renderAdminCms();
 }
 
 function renderAdminStudents() {
@@ -694,145 +707,150 @@ function slugify(s) {
     .replace(/^-+|-+$/g, '') || 'lecture';
 }
 
+let driveFetchStarted = false;
 function renderAdminCms() {
   const b = $('#admBody'), courses = adminData.courses || [];
-
-  if (CFG.API && session?.token && driveVideos.length === 0 && !renderAdminCms._loading) {
-    renderAdminCms._loading = true;
+  if (!driveVideos.length && !driveFetchStarted && CFG.ADMIN_DRIVE_VIDEOS) {
+    driveFetchStarted = true;
     fetch(CFG.API + CFG.ADMIN_DRIVE_VIDEOS, auth())
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        renderAdminCms._loading = false;
-        if (d?.videos) {
-          driveVideos = d.videos;
-          if (adminTab === 'cms') renderAdminCms();
-        }
-      })
-      .catch(() => { renderAdminCms._loading = false; });
+      .then(d => { if (d && Array.isArray(d.videos)) { driveVideos = d.videos; if (adminTab === 'cms') renderAdminCms(); } })
+      .catch(() => {});
   }
 
-  let html = `<div class="adm-bar">
-    <button id="addCourse" class="btn ghost sm">+ Add Course</button>
-    <button id="syncDrive" class="btn ghost sm">Sync from Drive</button>
-    <span class="grow"></span>
-    <button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button>
-  </div><div class="cms-grid">`;
+  const slugifyId = (t, fallback) => {
+    const s = String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+    return s || fallback;
+  };
+  const parseDriveId = (raw) => {
+    const s = String(raw || '').trim();
+    const m = s.match(/\/d\/([A-Za-z0-9_-]{10,80})|[?&]id=([A-Za-z0-9_-]{10,80})/);
+    if (m) return m[1] || m[2];
+    return /^[A-Za-z0-9_-]{20,80}$/.test(s) ? s : '';
+  };
+
+  let html = `<div class="adm-bar"><button id="addCourse" class="btn ghost sm">+ Add Course</button><button id="syncDrive" class="btn ghost sm">Sync from Drive</button><span class="grow"></span><button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button></div><div class="cms-grid">`;
 
   courses.forEach((c, ci) => {
     html += `<div class="cms-card">
       <div class="cms-row">
-        <div class="cms-field" style="flex:1;min-width:160px">
-          <label>Course ID</label>
-          <input data-c="${ci}" data-f="id" value="${esc(c.id)}" placeholder="Course ID (e.g. anatomy)">
-        </div>
-        <div class="cms-field" style="flex:2;min-width:200px">
-          <label>Course Title</label>
-          <input data-c="${ci}" data-f="title" value="${esc(c.title)}" placeholder="Course Title">
-        </div>
-        <div class="adm-acts" style="align-self:flex-end">
-          <button class="btn ghost sm" data-add-lec="${ci}">+ Add Lecture</button>
-          <button class="btn ghost sm" data-del-c="${ci}" style="color:#f87171">Delete Course</button>
-        </div>
+        <div class="cms-field"><label>Course ID</label><input data-c="${ci}" data-f="id" value="${esc(c.id)}" placeholder="e.g. anatomy"></div>
+        <div class="cms-field"><label>Course Title</label><input data-c="${ci}" data-f="title" value="${esc(c.title)}" placeholder="Course Title"></div>
+        <div class="adm-acts" style="align-self:end"><button class="btn ghost sm" data-add-lec="${ci}">+ Add Lecture</button><button class="btn ghost sm" data-del-c="${ci}" style="color:#f87171">Delete Course</button></div>
       </div>`;
 
     (c.lectures || []).forEach((l, li) => {
-      const qCount = l.quiz?.questions?.length || 0;
-      const curDriveId = l.driveId || '';
-      const curSource = l.driveId || l.slug || l.id || '';
-      const matched = driveVideos.find(v => v.fileId === curDriveId || v.fileId === curSource);
+      const hasDriveMatch = l.driveId && driveVideos.some(v => v.fileId === l.driveId);
+      const isCustom = l._forceCustom || (!hasDriveMatch && !!(l.driveId || (l.slug && l.slug !== l.id)));
+      const srcVal = l.driveId ? `https://drive.google.com/file/d/${l.driveId}/view` : (l.slug || '');
+      let optsHtml = '<option value="">-- Select Drive Video --</option>';
+      driveVideos.forEach(v => {
+        const mins = v.durationMs ? ` (${Math.max(1, Math.round(v.durationMs / 60000))} min)` : '';
+        optsHtml += `<option value="${esc(v.fileId)}" ${l.driveId === v.fileId && !l._forceCustom ? 'selected' : ''}>${esc(v.name + mins)}</option>`;
+      });
+      if (l.driveId && !hasDriveMatch && !l._forceCustom) {
+        optsHtml += `<option value="${esc(l.driveId)}" selected>Drive ID: ${esc(l.driveId)}</option>`;
+      }
+      optsHtml += `<option value="__custom__" ${isCustom ? 'selected' : ''}>-- Custom Link / ID / B2 Slug --</option>`;
 
-      html += `<div class="cms-card" style="margin-top:10px">
-        <div class="cms-row">
-          <div class="cms-field" style="flex:2;min-width:180px">
-            <label>Lecture Title</label>
+      html += `<div class="cms-lec-card">
+        <div class="cms-row-1">
+          <div class="cms-field">
+            <label>LECTURE TITLE</label>
             <input data-l="${ci}:${li}" data-f="title" value="${esc(l.title)}" placeholder="Lecture Title">
           </div>
-          <div class="cms-field" style="flex:2;min-width:220px">
-            <label>Drive Video</label>
-            <select data-l="${ci}:${li}" data-f="driveSelect">
-              <option value="">-- Select Drive Video --</option>
-              ${driveVideos.map(v => {
-                const mins = v.durationMs ? Math.round(v.durationMs / 60000) : null;
-                const sel = (v.fileId === curDriveId || (!curDriveId && v.fileId === curSource)) ? 'selected' : '';
-                return `<option value="${esc(v.fileId)}" ${sel}>${esc(v.name)}${mins ? ` (${mins} min)` : ''}</option>`;
-              }).join('')}
-              <option value="__custom__" ${(!matched && curSource) ? 'selected' : ''}>-- Custom Link / ID / B2 Slug --</option>
-            </select>
-            <input data-l="${ci}:${li}" data-f="source" value="${esc(curSource)}" placeholder="Drive Link / ID / B2 Slug" style="margin-top:5px;${matched ? 'display:none;' : ''}">
-          </div>
-          <div class="cms-field" style="width:140px">
-            <label>Status</label>
+          <div class="cms-field">
+            <label>STATUS</label>
             <select data-l="${ci}:${li}" data-f="status">
-              <option value="published" ${l.status === 'published' ? 'selected' : ''}>Published (منشور)</option>
-              <option value="soon" ${l.status !== 'published' ? 'selected' : ''}>Coming Soon (قريباً)</option>
+              <option value="published" ${l.status === 'published' ? 'selected' : ''}>Published</option>
+              <option value="soon" ${l.status !== 'published' ? 'selected' : ''}>Coming Soon</option>
             </select>
-          </div>
-          <div class="cms-field" style="flex:1;min-width:160px">
-            <label>PDF Link (optional)</label>
-            <input data-l="${ci}:${li}" data-f="pdf" value="${esc(l.pdf || '')}" placeholder="PDF URL (optional)">
           </div>
         </div>
-        <div class="adm-acts" style="margin-top:8px">
-          <button class="btn ghost sm" data-edit-q="${ci}:${li}">Quiz Builder (${qCount} Qs)</button>
-          <button class="btn ghost sm" data-del-l="${ci}:${li}" style="color:#f87171">Remove Lecture</button>
+        <div class="cms-row-2">
+          <div class="cms-field">
+            <label>DRIVE VIDEO</label>
+            <select data-l="${ci}:${li}" data-f="driveSelect">${optsHtml}</select>
+            ${isCustom ? `<input data-l="${ci}:${li}" data-f="source" value="${esc(srcVal)}" placeholder="Google Drive link/ID or B2 slug" style="margin-top:6px">` : ''}
+          </div>
+          <div class="cms-field">
+            <label>PDF LINK (OPTIONAL)</label>
+            <input data-l="${ci}:${li}" data-f="pdf" value="${esc(l.pdf || '')}" placeholder="PDF URL or key (optional)">
+          </div>
+        </div>
+        <div class="cms-row-3">
+          <div class="cms-field">
+            <label>QUIZ FILE (.HTML)</label>
+            <div class="cms-quiz-wrap">
+              <input type="file" accept=".html,.htm" data-qfile="${ci}:${li}">
+              ${l.quizHtml ? `<span class="cms-quiz-ok">✅ Quiz HTML attached</span><button type="button" class="btn ghost sm" data-qclear="${ci}:${li}">Clear</button>` : '<span class="muted" style="font-size:12px">No quiz attached</span>'}
+            </div>
+          </div>
+          <button type="button" class="btn ghost sm" data-del-l="${ci}:${li}" style="color:#f87171">Remove Lecture</button>
         </div>
       </div>`;
     });
     html += `</div>`;
   });
-  html += `</div><div id="quizModal" style="margin-top:16px"></div>`;
+  html += `</div>`;
   b.innerHTML = html;
 
   b.querySelectorAll('input[data-c]').forEach(inp => inp.oninput = () => { courses[inp.dataset.c][inp.dataset.f] = inp.value; });
-
   b.querySelectorAll('input[data-l], select[data-l]').forEach(inp => {
     const [ci, li] = inp.dataset.l.split(':').map(Number);
-    const lec = courses[ci].lectures[li];
-    const f = inp.dataset.f;
     const ev = inp.tagName === 'SELECT' ? 'onchange' : 'oninput';
-
     inp[ev] = () => {
+      const f = inp.dataset.f, lec = courses[ci].lectures[li];
       if (f === 'title') {
         lec.title = inp.value;
-        if (lec._isNew) {
-          lec.id = slugify(inp.value) || `lec-${li + 1}`;
-        }
+        if (lec._isNew) lec.id = slugifyId(inp.value, lec.id);
       } else if (f === 'driveSelect') {
-        const srcInp = b.querySelector(`input[data-l="${ci}:${li}"][data-f="source"]`);
         if (inp.value === '__custom__') {
-          if (srcInp) { srcInp.style.display = ''; srcInp.focus(); }
-        } else if (inp.value) {
-          if (srcInp) srcInp.style.display = 'none';
-          lec.driveId = inp.value;
-          lec.slug = '';
-          const v = driveVideos.find(x => x.fileId === inp.value);
-          if (v) {
-            if (v.durationMs) lec.duration = Math.max(1, Math.round(v.durationMs / 60000));
-            if (!lec.title || lec._isNew) {
-              lec.title = v.name.replace(/\.[a-z0-9]{2,5}$/i, '');
-              if (lec._isNew) lec.id = slugify(v.name);
-            }
-          }
+          lec._forceCustom = true;
           renderAdminCms();
         } else {
-          lec.driveId = null;
+          lec._forceCustom = false;
+          lec.driveId = inp.value || null;
+          lec.slug = lec.id;
+          const match = driveVideos.find(v => v.fileId === inp.value);
+          if (match && match.durationMs) lec.duration = Math.max(1, Math.round(match.durationMs / 60000));
+          renderAdminCms();
         }
       } else if (f === 'source') {
-        const val = inp.value.trim();
-        const m = val.match(/\/d\/([A-Za-z0-9_-]{10,80})|[?&]id=([A-Za-z0-9_-]{10,80})/);
-        const did = m ? (m[1] || m[2]) : (/^[A-Za-z0-9_-]{20,80}$/.test(val) ? val : null);
-        if (did) {
-          lec.driveId = did;
-          lec.slug = '';
-        } else {
-          lec.slug = val;
-          lec.driveId = null;
-        }
-      } else if (f === 'status') {
-        lec.status = inp.value;
+        const did = parseDriveId(inp.value);
+        lec.driveId = did || null;
+        lec.slug = did ? lec.id : inp.value.trim();
       } else if (f === 'pdf') {
         lec.pdf = inp.value.trim() || null;
+      } else {
+        lec[f] = inp.value;
       }
+    };
+  });
+
+  b.querySelectorAll('input[data-qfile]').forEach(inp => {
+    inp.onchange = () => {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      if (file.size > 150 * 1024) { toast('Quiz HTML file is too large (max 150 KB)'); inp.value = ''; return; }
+      const [ci, li] = inp.dataset.qfile.split(':').map(Number);
+      const reader = new FileReader();
+      reader.onload = () => {
+        courses[ci].lectures[li].quizHtml = String(reader.result || '');
+        courses[ci].lectures[li].quiz = null;
+        toast('Quiz HTML attached');
+        renderAdminCms();
+      };
+      reader.readAsText(file, 'utf-8');
+    };
+  });
+
+  b.querySelectorAll('[data-qclear]').forEach(btn => {
+    btn.onclick = () => {
+      const [ci, li] = btn.dataset.qclear.split(':').map(Number);
+      courses[ci].lectures[li].quizHtml = null;
+      courses[ci].lectures[li].quiz = null;
+      renderAdminCms();
     };
   });
 
@@ -841,115 +859,47 @@ function renderAdminCms() {
   b.querySelectorAll('[data-add-lec]').forEach(btn => btn.onclick = () => {
     const c = courses[Number(btn.dataset.addLec)];
     const n = c.lectures.length + 1;
-    c.lectures.push({ id: `${c.id}-${String(n).padStart(2, '0')}`, slug: `lecture${n}`, driveId: null, title: `Lecture ${n}`, duration: 45, status: 'soon', pdf: null, quiz: null, _isNew: true });
+    c.lectures.push({ id: `${c.id}-${Date.now().toString(36)}`, slug: '', driveId: null, title: `Lecture ${n}`, duration: null, status: 'soon', pdf: null, quiz: null, quizHtml: null, _isNew: true });
     renderAdminCms();
   });
   b.querySelectorAll('[data-del-l]').forEach(btn => btn.onclick = () => {
     const [ci, li] = btn.dataset.delL.split(':').map(Number);
     courses[ci].lectures.splice(li, 1); renderAdminCms();
   });
-  b.querySelectorAll('[data-edit-q]').forEach(btn => btn.onclick = () => {
-    const [ci, li] = btn.dataset.editQ.split(':').map(Number);
-    openQuizBuilder(ci, li);
-  });
 
-  const syncBtn = $('#syncDrive');
-  if (syncBtn) {
-    syncBtn.onclick = async () => {
-      syncBtn.disabled = true;
-      syncBtn.textContent = 'Syncing...';
-      try {
-        const res = await fetch(CFG.API + CFG.ADMIN_DRIVE_VIDEOS, auth());
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Failed to sync Google Drive');
-        driveVideos = data.videos || [];
-        if (!courses.length) {
-          courses.push({ id: 'main-course', title: 'Main Course', lectures: [] });
-        }
-        const existingDriveIds = new Set();
-        for (const c of courses) {
-          for (const l of (c.lectures || [])) {
-            if (l.driveId) existingDriveIds.add(l.driveId);
-            if (l.slug) existingDriveIds.add(l.slug);
-          }
-        }
-        let addedCount = 0;
-        const targetCourse = courses[0];
-        for (const v of driveVideos) {
-          if (!existingDriveIds.has(v.fileId)) {
-            const rawTitle = v.name.replace(/\.[a-z0-9]{2,5}$/i, '');
-            const slugId = slugify(rawTitle) || `lec-${targetCourse.lectures.length + 1}`;
-            let finalId = slugId, counter = 1;
-            while (targetCourse.lectures.some(x => x.id === finalId)) {
-              finalId = `${slugId}-${++counter}`;
-            }
-            targetCourse.lectures.push({
-              id: finalId,
-              slug: '',
-              driveId: v.fileId,
-              title: rawTitle,
-              duration: v.durationMs ? Math.max(1, Math.round(v.durationMs / 60000)) : null,
-              status: 'soon',
-              pdf: null,
-              quiz: null,
-              _isNew: true,
-            });
-            existingDriveIds.add(v.fileId);
-            addedCount++;
-          }
-        }
-        toast(addedCount ? `Synced! Added ${addedCount} new lecture(s) from Drive.` : 'Drive synced! All videos are already in the catalog.');
-        renderAdminCms();
-      } catch (err) {
-        toast(err.message || 'Error syncing from Drive');
-      } finally {
-        syncBtn.disabled = false;
-        syncBtn.textContent = 'Sync from Drive';
-      }
-    };
-  }
+  $('#syncDrive').onclick = async () => {
+    const btn = $('#syncDrive'); btn.disabled = true; btn.textContent = 'Syncing...';
+    try {
+      const r = await fetch(CFG.API + CFG.ADMIN_DRIVE_VIDEOS, auth());
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Sync failed');
+      driveVideos = d.videos || [];
+      if (!courses.length) courses.push({ id: 'course-1', title: 'Main Course', lectures: [] });
+      const existing = new Set();
+      courses.forEach(c => (c.lectures || []).forEach(l => { if (l.driveId) existing.add(l.driveId); }));
+      let added = 0;
+      const targetCourse = courses[0];
+      driveVideos.forEach(v => {
+        if (existing.has(v.fileId)) return;
+        const cleanTitle = v.name.replace(/\.[^/.]+$/, '');
+        const baseId = slugifyId(cleanTitle, 'lec') + '-' + v.fileId.slice(0, 4).toLowerCase();
+        targetCourse.lectures.push({
+          id: baseId, slug: baseId, driveId: v.fileId, title: cleanTitle,
+          duration: v.durationMs ? Math.max(1, Math.round(v.durationMs / 60000)) : null,
+          status: 'soon', pdf: null, quiz: null, quizHtml: null, _isNew: true,
+        });
+        added++;
+      });
+      toast(`Synced ${driveVideos.length} videos (${added} new). Click Save!`);
+      renderAdminCms();
+    } catch (x) {
+      toast(x.message || 'Drive sync failed');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sync from Drive';
+    }
+  };
 
   $('#saveCms').onclick = saveCmsToServer;
-}
-
-function openQuizBuilder(ci, li) {
-  const lec = adminData.courses[ci].lectures[li];
-  if (!lec.quiz || !Array.isArray(lec.quiz.questions)) lec.quiz = { questions: [] };
-  const qs = lec.quiz.questions, m = $('#quizModal');
-  const draw = () => {
-    m.innerHTML = `<div class="cms-card">
-      <div class="adm-top"><strong>Quiz Builder: ${esc(lec.title)}</strong><div class="adm-acts"><button id="qbAdd" class="btn ghost sm">+ Add Question</button><button id="qbDone" class="btn lime sm">Done (Remember to Save All)</button></div></div>
-      ${qs.map((q, qi) => `<div class="qb-q">
-        <div class="cms-row"><input data-qi="${qi}" data-qf="q" value="${esc(q.q)}" placeholder="Question text" style="grid-column:1/-1"></div>
-        <div class="cms-row">${[0, 1, 2, 3].map(oi => `<input data-qi="${qi}" data-oi="${oi}" value="${esc(q.options?.[oi] || '')}" placeholder="Option ${oi + 1}">`).join('')}</div>
-        <div class="cms-row">
-          <select data-qi="${qi}" data-qf="answer">${[0, 1, 2, 3].map(oi => `<option value="${oi}" ${Number(q.answer) === oi ? 'selected' : ''}>Correct: Option ${oi + 1}</option>`).join('')}</select>
-          <input data-qi="${qi}" data-qf="explain" value="${esc(q.explain || '')}" placeholder="Explanation (optional)">
-          <button class="btn ghost sm" data-qb-del="${qi}" style="color:#f87171">Delete Q</button>
-        </div>
-      </div>`).join('')}
-    </div>`;
-    m.querySelectorAll('[data-qf]').forEach(inp => {
-      const ev = inp.tagName === 'SELECT' ? 'onchange' : 'oninput';
-      inp[ev] = () => {
-        const q = qs[Number(inp.dataset.qi)], f = inp.dataset.qf;
-        q[f] = f === 'answer' ? Number(inp.value) : inp.value;
-      };
-    });
-    m.querySelectorAll('[data-oi]').forEach(inp => inp.oninput = () => {
-      const q = qs[Number(inp.dataset.qi)];
-      if (!Array.isArray(q.options)) q.options = ['', '', '', ''];
-      q.options[Number(inp.dataset.oi)] = inp.value;
-    });
-    m.querySelectorAll('[data-qb-del]').forEach(btn => btn.onclick = () => { qs.splice(Number(btn.dataset.qbDel), 1); draw(); });
-    $('#qbAdd').onclick = () => { qs.push({ q: '', options: ['', '', '', ''], answer: 0, explain: '' }); draw(); };
-    $('#qbDone').onclick = () => {
-      lec.quiz = qs.length ? { questions: qs.map(x => ({ ...x, options: (x.options || []).filter(Boolean) })) } : null;
-      m.innerHTML = ''; renderAdminCms();
-    };
-  };
-  draw();
-  m.scrollIntoView({ behavior: 'smooth' });
 }
 
 async function saveCmsToServer() {
@@ -964,43 +914,6 @@ async function saveCmsToServer() {
   catalog = data.courses;
   toast('Courses & quizzes saved!');
   renderAdmin();
-}
-
-function renderAdminScores() {
-  const b = $('#admBody'), scores = adminData.scores || [];
-  b.innerHTML = `
-    <div class="adm-bar">
-      <input id="scQ" type="search" placeholder="Filter by Student ID or Lecture..." style="flex:1;min-width:200px">
-      <button id="expSc" class="btn ghost sm">Export Grades CSV</button>
-    </div>
-    <div class="tbl-wrap"><table class="adm-tbl"><thead><tr><th>Student ID</th><th>Name</th><th>Lecture</th><th>Score</th><th>%</th><th>Submitted</th></tr></thead><tbody id="scRows"></tbody></table></div>`;
-  const draw = () => {
-    const q = $('#scQ').value.trim().toLowerCase();
-    const rows = scores.filter(x => !q || x.sid.toLowerCase().includes(q) || x.name.toLowerCase().includes(q) || (x.lectureTitle || '').toLowerCase().includes(q));
-    $('#scRows').innerHTML = rows.length ? rows.map(x => `<tr>
-      <td><strong>${esc(x.sid)}</strong></td><td>${esc(x.name)}</td><td>${esc(x.lectureTitle || x.lectureId)}</td>
-      <td>${x.score} / ${x.total}</td><td><strong>${x.pct}%</strong></td><td>${new Date(x.at).toLocaleString()}</td>
-    </tr>`).join('') : '<tr><td colspan="6" class="muted">No quiz submissions yet.</td></tr>';
-  };
-  $('#scQ').oninput = draw;
-  $('#expSc').onclick = () => downloadCsv('grades.csv', [['Student ID', 'Name', 'Lecture', 'Score', 'Total', 'Percent', 'Date'], ...scores.map(x => [x.sid, x.name, x.lectureTitle || x.lectureId, x.score, x.total, x.pct, new Date(x.at).toISOString()])]);
-  draw();
-}
-
-function renderAdminAlerts() {
-  const b = $('#admBody'), alerts = adminData.alerts || [];
-  b.innerHTML = `
-    <div class="tbl-wrap"><table class="adm-tbl"><thead><tr><th>Time</th><th>Student ID</th><th>Event</th><th>Lecture</th><th>Action</th></tr></thead><tbody>
-      ${alerts.length ? alerts.map(a => `<tr>
-        <td>${new Date(a.at).toLocaleString()}</td>
-        <td><strong>${esc(a.sid)}</strong></td>
-        <td><span class="tag-st st-banned">${esc(a.ev)}</span></td>
-        <td>${esc(a.slug || '-')}</td>
-        <td><div class="adm-acts"><button class="btn ghost sm" data-ak="${esc(a.sid)}">Kick</button><button class="btn ghost sm" data-ab="${esc(a.sid)}" style="color:#f87171">Ban</button></div></td>
-      </tr>`).join('') : '<tr><td colspan="5" class="muted">No security alerts logged.</td></tr>'}
-    </tbody></table></div>`;
-  b.querySelectorAll('[data-ak]').forEach(btn => btn.onclick = () => updateStudent(btn.dataset.ak, { kick: true }));
-  b.querySelectorAll('[data-ab]').forEach(btn => btn.onclick = () => updateStudent(btn.dataset.ab, { status: 'banned' }));
 }
 
 const IC = {
