@@ -19,6 +19,7 @@ const CFG = {
   ADMIN_SETTINGS: '/api/admin/settings',
   ADMIN_STUDENT: '/api/admin/student',
   ADMIN_CATALOG: '/api/admin/catalog',
+  ADMIN_DRIVE_VIDEOS: '/api/admin/drive-videos',
   DEMO_DATA: 'data/courses.json'
 };
 const $ = s => document.querySelector(s);
@@ -27,6 +28,7 @@ const ls = { get: k => { try { return localStorage.getItem(k) } catch { return n
 let session = JSON.parse(sessionStorage.getItem('dg:s') || 'null'), catalog = [], course = null, cleanup = null;
 let pendingEmail = '', resetEmail = '', resendTimer = 0;
 let adminData = null, adminTab = 'students';
+let driveVideos = [];
 let googleClientId = '', googleInited = false;
 
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2400) };
@@ -683,28 +685,94 @@ async function resetStudentDevices(sid) {
   } catch { toast('Could not reset devices'); }
 }
 
+function slugify(s) {
+  return String(s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\.[a-z0-9]{2,5}$/i, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'lecture';
+}
+
 function renderAdminCms() {
   const b = $('#admBody'), courses = adminData.courses || [];
-  let html = `<div class="adm-bar"><button id="addCourse" class="btn ghost sm">+ Add Course</button><span class="grow"></span><button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button></div><div class="cms-grid">`;
+
+  if (CFG.API && session?.token && driveVideos.length === 0 && !renderAdminCms._loading) {
+    renderAdminCms._loading = true;
+    fetch(CFG.API + CFG.ADMIN_DRIVE_VIDEOS, auth())
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        renderAdminCms._loading = false;
+        if (d?.videos) {
+          driveVideos = d.videos;
+          if (adminTab === 'cms') renderAdminCms();
+        }
+      })
+      .catch(() => { renderAdminCms._loading = false; });
+  }
+
+  let html = `<div class="adm-bar">
+    <button id="addCourse" class="btn ghost sm">+ Add Course</button>
+    <button id="syncDrive" class="btn ghost sm">Sync from Drive</button>
+    <span class="grow"></span>
+    <button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button>
+  </div><div class="cms-grid">`;
+
   courses.forEach((c, ci) => {
     html += `<div class="cms-card">
       <div class="cms-row">
-        <input data-c="${ci}" data-f="id" value="${esc(c.id)}" placeholder="Course ID (e.g. anatomy)">
-        <input data-c="${ci}" data-f="title" value="${esc(c.title)}" placeholder="Course Title">
-        <div class="adm-acts"><button class="btn ghost sm" data-add-lec="${ci}">+ Add Lecture</button><button class="btn ghost sm" data-del-c="${ci}" style="color:#f87171">Delete Course</button></div>
+        <div class="cms-field" style="flex:1;min-width:160px">
+          <label>Course ID</label>
+          <input data-c="${ci}" data-f="id" value="${esc(c.id)}" placeholder="Course ID (e.g. anatomy)">
+        </div>
+        <div class="cms-field" style="flex:2;min-width:200px">
+          <label>Course Title</label>
+          <input data-c="${ci}" data-f="title" value="${esc(c.title)}" placeholder="Course Title">
+        </div>
+        <div class="adm-acts" style="align-self:flex-end">
+          <button class="btn ghost sm" data-add-lec="${ci}">+ Add Lecture</button>
+          <button class="btn ghost sm" data-del-c="${ci}" style="color:#f87171">Delete Course</button>
+        </div>
       </div>`;
+
     (c.lectures || []).forEach((l, li) => {
       const qCount = l.quiz?.questions?.length || 0;
+      const curDriveId = l.driveId || '';
+      const curSource = l.driveId || l.slug || l.id || '';
+      const matched = driveVideos.find(v => v.fileId === curDriveId || v.fileId === curSource);
+
       html += `<div class="cms-card" style="margin-top:10px">
         <div class="cms-row">
-          <input data-l="${ci}:${li}" data-f="id" value="${esc(l.id)}" placeholder="Lecture ID (anat-01)">
-          <input data-l="${ci}:${li}" data-f="slug" value="${esc(l.slug || l.id)}" placeholder="B2 Slug (lecture1)">
-          <input data-l="${ci}:${li}" data-f="title" value="${esc(l.title)}" placeholder="Lecture Title">
-          <input data-l="${ci}:${li}" data-f="duration" type="number" value="${esc(l.duration ?? '')}" placeholder="Minutes">
-          <select data-l="${ci}:${li}" data-f="status"><option value="published" ${l.status === 'published' ? 'selected' : ''}>published</option><option value="soon" ${l.status !== 'published' ? 'selected' : ''}>soon</option></select>
-          <input data-l="${ci}:${li}" data-f="pdf" value="${esc(l.pdf || '')}" placeholder="PDF URL (optional)">
+          <div class="cms-field" style="flex:2;min-width:180px">
+            <label>Lecture Title</label>
+            <input data-l="${ci}:${li}" data-f="title" value="${esc(l.title)}" placeholder="Lecture Title">
+          </div>
+          <div class="cms-field" style="flex:2;min-width:220px">
+            <label>Drive Video</label>
+            <select data-l="${ci}:${li}" data-f="driveSelect">
+              <option value="">-- Select Drive Video --</option>
+              ${driveVideos.map(v => {
+                const mins = v.durationMs ? Math.round(v.durationMs / 60000) : null;
+                const sel = (v.fileId === curDriveId || (!curDriveId && v.fileId === curSource)) ? 'selected' : '';
+                return `<option value="${esc(v.fileId)}" ${sel}>${esc(v.name)}${mins ? ` (${mins} min)` : ''}</option>`;
+              }).join('')}
+              <option value="__custom__" ${(!matched && curSource) ? 'selected' : ''}>-- Custom Link / ID / B2 Slug --</option>
+            </select>
+            <input data-l="${ci}:${li}" data-f="source" value="${esc(curSource)}" placeholder="Drive Link / ID / B2 Slug" style="margin-top:5px;${matched ? 'display:none;' : ''}">
+          </div>
+          <div class="cms-field" style="width:140px">
+            <label>Status</label>
+            <select data-l="${ci}:${li}" data-f="status">
+              <option value="published" ${l.status === 'published' ? 'selected' : ''}>Published (منشور)</option>
+              <option value="soon" ${l.status !== 'published' ? 'selected' : ''}>Coming Soon (قريباً)</option>
+            </select>
+          </div>
+          <div class="cms-field" style="flex:1;min-width:160px">
+            <label>PDF Link (optional)</label>
+            <input data-l="${ci}:${li}" data-f="pdf" value="${esc(l.pdf || '')}" placeholder="PDF URL (optional)">
+          </div>
         </div>
-        <div class="adm-acts">
+        <div class="adm-acts" style="margin-top:8px">
           <button class="btn ghost sm" data-edit-q="${ci}:${li}">Quiz Builder (${qCount} Qs)</button>
           <button class="btn ghost sm" data-del-l="${ci}:${li}" style="color:#f87171">Remove Lecture</button>
         </div>
@@ -716,20 +784,64 @@ function renderAdminCms() {
   b.innerHTML = html;
 
   b.querySelectorAll('input[data-c]').forEach(inp => inp.oninput = () => { courses[inp.dataset.c][inp.dataset.f] = inp.value; });
+
   b.querySelectorAll('input[data-l], select[data-l]').forEach(inp => {
     const [ci, li] = inp.dataset.l.split(':').map(Number);
+    const lec = courses[ci].lectures[li];
+    const f = inp.dataset.f;
     const ev = inp.tagName === 'SELECT' ? 'onchange' : 'oninput';
+
     inp[ev] = () => {
-      const f = inp.dataset.f;
-      courses[ci].lectures[li][f] = f === 'duration' ? (inp.value ? Number(inp.value) : null) : (inp.value || (f === 'pdf' ? null : ''));
+      if (f === 'title') {
+        lec.title = inp.value;
+        if (lec._isNew) {
+          lec.id = slugify(inp.value) || `lec-${li + 1}`;
+        }
+      } else if (f === 'driveSelect') {
+        const srcInp = b.querySelector(`input[data-l="${ci}:${li}"][data-f="source"]`);
+        if (inp.value === '__custom__') {
+          if (srcInp) { srcInp.style.display = ''; srcInp.focus(); }
+        } else if (inp.value) {
+          if (srcInp) srcInp.style.display = 'none';
+          lec.driveId = inp.value;
+          lec.slug = '';
+          const v = driveVideos.find(x => x.fileId === inp.value);
+          if (v) {
+            if (v.durationMs) lec.duration = Math.max(1, Math.round(v.durationMs / 60000));
+            if (!lec.title || lec._isNew) {
+              lec.title = v.name.replace(/\.[a-z0-9]{2,5}$/i, '');
+              if (lec._isNew) lec.id = slugify(v.name);
+            }
+          }
+          renderAdminCms();
+        } else {
+          lec.driveId = null;
+        }
+      } else if (f === 'source') {
+        const val = inp.value.trim();
+        const m = val.match(/\/d\/([A-Za-z0-9_-]{10,80})|[?&]id=([A-Za-z0-9_-]{10,80})/);
+        const did = m ? (m[1] || m[2]) : (/^[A-Za-z0-9_-]{20,80}$/.test(val) ? val : null);
+        if (did) {
+          lec.driveId = did;
+          lec.slug = '';
+        } else {
+          lec.slug = val;
+          lec.driveId = null;
+        }
+      } else if (f === 'status') {
+        lec.status = inp.value;
+      } else if (f === 'pdf') {
+        lec.pdf = inp.value.trim() || null;
+      }
     };
   });
+
   $('#addCourse').onclick = () => { courses.push({ id: 'course-' + (courses.length + 1), title: 'New Course', lectures: [] }); renderAdminCms(); };
   b.querySelectorAll('[data-del-c]').forEach(btn => btn.onclick = () => { courses.splice(Number(btn.dataset.delC), 1); renderAdminCms(); });
   b.querySelectorAll('[data-add-lec]').forEach(btn => btn.onclick = () => {
     const c = courses[Number(btn.dataset.addLec)];
     const n = c.lectures.length + 1;
-    c.lectures.push({ id: `${c.id}-${String(n).padStart(2, '0')}`, slug: `lecture${n}`, title: `Lecture ${n}`, duration: 45, status: 'soon', pdf: null, quiz: null });
+    c.lectures.push({ id: `${c.id}-${String(n).padStart(2, '0')}`, slug: `lecture${n}`, driveId: null, title: `Lecture ${n}`, duration: 45, status: 'soon', pdf: null, quiz: null, _isNew: true });
     renderAdminCms();
   });
   b.querySelectorAll('[data-del-l]').forEach(btn => btn.onclick = () => {
@@ -740,6 +852,63 @@ function renderAdminCms() {
     const [ci, li] = btn.dataset.editQ.split(':').map(Number);
     openQuizBuilder(ci, li);
   });
+
+  const syncBtn = $('#syncDrive');
+  if (syncBtn) {
+    syncBtn.onclick = async () => {
+      syncBtn.disabled = true;
+      syncBtn.textContent = 'Syncing...';
+      try {
+        const res = await fetch(CFG.API + CFG.ADMIN_DRIVE_VIDEOS, auth());
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to sync Google Drive');
+        driveVideos = data.videos || [];
+        if (!courses.length) {
+          courses.push({ id: 'main-course', title: 'Main Course', lectures: [] });
+        }
+        const existingDriveIds = new Set();
+        for (const c of courses) {
+          for (const l of (c.lectures || [])) {
+            if (l.driveId) existingDriveIds.add(l.driveId);
+            if (l.slug) existingDriveIds.add(l.slug);
+          }
+        }
+        let addedCount = 0;
+        const targetCourse = courses[0];
+        for (const v of driveVideos) {
+          if (!existingDriveIds.has(v.fileId)) {
+            const rawTitle = v.name.replace(/\.[a-z0-9]{2,5}$/i, '');
+            const slugId = slugify(rawTitle) || `lec-${targetCourse.lectures.length + 1}`;
+            let finalId = slugId, counter = 1;
+            while (targetCourse.lectures.some(x => x.id === finalId)) {
+              finalId = `${slugId}-${++counter}`;
+            }
+            targetCourse.lectures.push({
+              id: finalId,
+              slug: '',
+              driveId: v.fileId,
+              title: rawTitle,
+              duration: v.durationMs ? Math.max(1, Math.round(v.durationMs / 60000)) : null,
+              status: 'soon',
+              pdf: null,
+              quiz: null,
+              _isNew: true,
+            });
+            existingDriveIds.add(v.fileId);
+            addedCount++;
+          }
+        }
+        toast(addedCount ? `Synced! Added ${addedCount} new lecture(s) from Drive.` : 'Drive synced! All videos are already in the catalog.');
+        renderAdminCms();
+      } catch (err) {
+        toast(err.message || 'Error syncing from Drive');
+      } finally {
+        syncBtn.disabled = false;
+        syncBtn.textContent = 'Sync from Drive';
+      }
+    };
+  }
+
   $('#saveCms').onclick = saveCmsToServer;
 }
 
@@ -1173,7 +1342,16 @@ function mountPlayer(box, playData, l, nextLec, errMessage = '') {
 
   /* ---------- Playback controls ---------- */
   const saved = +ls.get(key);
-  v.addEventListener('loadedmetadata', () => { if (saved > 5 && saved < v.duration - 15) { v.currentTime = saved; toast('Resumed at ' + fmt(saved)) } }, { once: true });
+  v.addEventListener('loadedmetadata', () => {
+    if (saved > 5 && saved < v.duration - 15) { v.currentTime = saved; toast('Resumed at ' + fmt(saved)) }
+    if (Number.isFinite(v.duration) && v.duration > 0) {
+      const mins = Math.max(1, Math.round(v.duration / 60));
+      const metaEl = $('#lMeta');
+      if (metaEl && !metaEl.textContent.includes('min')) {
+        metaEl.textContent = `${metaEl.textContent} · ${mins} min`;
+      }
+    }
+  }, { once: true });
 
   const upd = () => { const d = v.duration || 0; $$('#seek').value = d ? v.currentTime / d * 1000 : 0; $$('#seek').style.setProperty('--p', (d ? v.currentTime / d * 100 : 0) + '%'); $$('#tm').textContent = fmt(v.currentTime) + ' / ' + fmt(d) };
   v.ontimeupdate = () => { upd(); if (Date.now() - last > 4000 && v.duration) { last = Date.now(); ls.set(key, v.currentTime); ls.set('dg:prog:' + l.id, v.currentTime / v.duration) } };
