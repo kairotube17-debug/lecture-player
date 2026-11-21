@@ -29,6 +29,8 @@ let session = JSON.parse(sessionStorage.getItem('dg:s') || 'null'), catalog = []
 let pendingEmail = '', resetEmail = '', resendTimer = 0;
 let adminData = null, adminTab = 'students';
 let bunnyVideos = [];
+let hasUnsavedChanges = false;
+const collapsedCourses = new Set();
 let googleClientId = '', googleInited = false;
 
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2400) };
@@ -605,9 +607,9 @@ function renderAdmin() {
 
   v.innerHTML = `
     <div class="adm-top">
-      <div><h2>Dr. Gendy — Admin Panel</h2><p class="muted">Students, subscriptions &amp; courses management</p></div>
+      <div><h2>Admin Panel</h2><p class="muted">Students, subscriptions &amp; courses management</p></div>
       <div class="adm-acts">
-        <button id="toggleFree" class="btn ${adminData.freeAccess ? 'lime' : 'ghost'}">${adminData.freeAccess ? '🟢 وضع ليلة الامتحان: مفعّل (Free Access ON)' : '⚪ وضع ليلة الامتحان: مغلق (Paid Only)'}</button>
+        <button id="toggleFree" class="free-toggle ${adminData.freeAccess ? 'on' : ''}" type="button"><i></i><span>وضع ليلة الامتحان</span><strong>${adminData.freeAccess ? 'ON' : 'OFF'}</strong></button>
         <button id="admRefresh" class="btn ghost sm">Refresh</button>
       </div>
     </div>
@@ -736,17 +738,28 @@ function renderAdminCms() {
     return /^[A-Za-z0-9_-]{20,64}$/.test(s) ? s : '';
   };
 
-  let html = `<div class="adm-bar"><button id="addCourse" class="btn ghost sm">+ Add Course</button><button id="syncBunny" class="btn ghost sm">Sync from Bunny</button><span class="grow"></span><button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button></div><div class="cms-grid">`;
+  let html = `<div class="adm-sticky-bar">
+    <div class="adm-sticky-left"><button id="addCourse" class="btn ghost sm">+ Add Course</button><button id="syncBunny" class="btn ghost sm">Sync from Bunny</button></div>
+    <div class="adm-sticky-right">${hasUnsavedChanges ? '<span class="unsaved-pill">Unsaved changes</span>' : ''}<button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button></div>
+  </div><div class="cms-grid">`;
 
   courses.forEach((c, ci) => {
+    const collapsed = collapsedCourses.has(ci) || collapsedCourses.has(String(c.id || ci));
+    const lectures = c.lectures || [];
+    const published = lectures.filter(l => l.status === 'published').length;
     html += `<div class="cms-card">
-      <div class="cms-row">
-        <div class="cms-field"><label>Course ID</label><input data-c="${ci}" data-f="id" value="${esc(c.id)}" placeholder="e.g. anatomy"></div>
-        <div class="cms-field"><label>Course Title</label><input data-c="${ci}" data-f="title" value="${esc(c.title)}" placeholder="Course Title"></div>
-        <div class="adm-acts" style="align-self:end"><button class="btn ghost sm" data-add-lec="${ci}">+ Add Lecture</button><button class="btn ghost sm" data-del-c="${ci}" style="color:#f87171">Delete Course</button></div>
-      </div>`;
+      <div class="cms-course-head">
+        <button type="button" class="btn ghost sm cms-collapse" data-collapse="${ci}" aria-label="${collapsed ? 'Expand' : 'Collapse'} course">${collapsed ? '▸' : '▾'}</button>
+        <div class="cms-course-main">
+          <div class="cms-field"><label>Course ID</label><input data-c="${ci}" data-f="id" value="${esc(c.id)}" placeholder="e.g. anatomy"></div>
+          <div class="cms-field"><label>Course Title</label><input data-c="${ci}" data-f="title" value="${esc(c.title)}" placeholder="Course Title"></div>
+          <span class="cms-badge">${lectures.length} Lectures · ${published} Published</span>
+        </div>
+        <div class="cms-course-actions"><button class="btn ghost sm" data-add-lec="${ci}">+ Add Lecture</button><button class="btn ghost sm adm-action-danger" data-del-c="${ci}">Delete Course</button></div>
+      </div>
+      <div class="cms-course-body ${collapsed ? 'collapsed' : ''}">`;
 
-    (c.lectures || []).forEach((l, li) => {
+    lectures.forEach((l, li) => {
       const bunnyGuid = l.bunnyGuid || l.bunnyId || '';
       const hasBunnyMatch = bunnyGuid && bunnyVideos.some(v => v.guid === bunnyGuid);
       const isCustom = l._forceCustom || (!!bunnyGuid && !hasBunnyMatch);
@@ -755,54 +768,36 @@ function renderAdminCms() {
         const mins = v.duration ? ` (${Math.max(1, Math.round(v.duration / 60))} min)` : '';
         optsHtml += `<option value="${esc(v.guid)}" ${bunnyGuid === v.guid && !l._forceCustom ? 'selected' : ''}>${esc(v.name + mins)}</option>`;
       });
-      if (bunnyGuid && !hasBunnyMatch && !l._forceCustom) {
-        optsHtml += `<option value="${esc(bunnyGuid)}" selected>Bunny GUID: ${esc(bunnyGuid)}</option>`;
-      }
+      if (bunnyGuid && !hasBunnyMatch && !l._forceCustom) optsHtml += `<option value="${esc(bunnyGuid)}" selected>Bunny GUID: ${esc(bunnyGuid)}</option>`;
       optsHtml += `<option value="__custom__" ${isCustom ? 'selected' : ''}>-- Enter Bunny GUID / Embed URL --</option>`;
 
       html += `<div class="cms-lec-card">
+        <div class="cms-lec-head"><div class="cms-lec-left"><span class="cms-lec-num">${String(li + 1).padStart(2, '0')}</span><span class="cms-status ${l.status === 'published' ? 'published' : 'soon'}">${l.status === 'published' ? 'Published' : 'Coming Soon'}</span></div><button type="button" class="btn ghost sm adm-action-danger" data-del-l="${ci}:${li}">Remove Lecture</button></div>
         <div class="cms-row-1">
-          <div class="cms-field">
-            <label>LECTURE TITLE</label>
-            <input data-l="${ci}:${li}" data-f="title" value="${esc(l.title)}" placeholder="Lecture Title">
-          </div>
-          <div class="cms-field">
-            <label>STATUS</label>
-            <select data-l="${ci}:${li}" data-f="status">
-              <option value="published" ${l.status === 'published' ? 'selected' : ''}>Published</option>
-              <option value="soon" ${l.status !== 'published' ? 'selected' : ''}>Coming Soon</option>
-            </select>
-          </div>
+          <div class="cms-field"><label>Lecture Title</label><input data-l="${ci}:${li}" data-f="title" value="${esc(l.title)}" placeholder="Lecture Title"></div>
+          <div class="cms-field"><label>Status</label><select data-l="${ci}:${li}" data-f="status"><option value="published" ${l.status === 'published' ? 'selected' : ''}>Published</option><option value="soon" ${l.status !== 'published' ? 'selected' : ''}>Coming Soon</option></select></div>
         </div>
         <div class="cms-row-2">
-          <div class="cms-field">
-            <label>BUNNY STREAM VIDEO</label>
-            <select data-l="${ci}:${li}" data-f="bunnySelect">${optsHtml}</select>
-            ${isCustom ? `<input data-l="${ci}:${li}" data-f="source" value="${esc(bunnyGuid)}" placeholder="Bunny video GUID or embed URL" style="margin-top:6px">` : ''}
-          </div>
-          <div class="cms-field">
-            <label>PDF LINK (OPTIONAL)</label>
-            <input data-l="${ci}:${li}" data-f="pdf" value="${esc(l.pdf || '')}" placeholder="PDF URL or key (optional)">
-          </div>
+          <div class="cms-field"><label>Bunny Stream Video</label><select data-l="${ci}:${li}" data-f="bunnySelect">${optsHtml}</select>${isCustom ? `<input data-l="${ci}:${li}" data-f="source" value="${esc(bunnyGuid)}" placeholder="Bunny video GUID or embed URL" style="margin-top:6px">` : ''}</div>
+          <div class="cms-field"><label>PDF Link (optional)</label><input data-l="${ci}:${li}" data-f="pdf" value="${esc(l.pdf || '')}" placeholder="PDF URL or key (optional)"></div>
         </div>
         <div class="cms-row-3">
-          <div class="cms-field">
-            <label>QUIZ FILE (.HTML)</label>
-            <div class="cms-quiz-wrap">
-              <input type="file" accept=".html,.htm" data-qfile="${ci}:${li}">
-              ${l.quizHtml ? `<span class="cms-quiz-ok">✅ Quiz HTML attached</span><button type="button" class="btn ghost sm" data-qclear="${ci}:${li}">Clear</button>` : '<span class="muted" style="font-size:12px">No quiz attached</span>'}
-            </div>
-          </div>
-          <button type="button" class="btn ghost sm" data-del-l="${ci}:${li}" style="color:#f87171">Remove Lecture</button>
+          <div class="cms-field"><label>Quiz File (.html)</label><div class="cms-quiz-wrap"><input class="cms-file-hidden" type="file" accept=".html,.htm" data-qfile="${ci}:${li}" id="qfile-${ci}-${li}">${l.quizHtml ? `<label class="cms-upload-btn attached" for="qfile-${ci}-${li}"><span>Quiz HTML attached</span></label><button type="button" class="btn ghost sm" data-qreplace="${ci}:${li}" onclick="document.getElementById('qfile-${ci}-${li}')?.click()">Replace</button><button type="button" class="btn ghost sm" data-qclear="${ci}:${li}">Clear</button>` : `<label class="cms-upload-btn" for="qfile-${ci}-${li}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14"/></svg><span>Upload Quiz (.html)</span></label>`}</div></div>
         </div>
       </div>`;
     });
-    html += `</div>`;
+    html += `</div></div>`;
   });
   html += `</div>`;
   b.innerHTML = html;
 
-  b.querySelectorAll('input[data-c]').forEach(inp => inp.oninput = () => { courses[inp.dataset.c][inp.dataset.f] = inp.value; });
+  b.querySelectorAll('[data-collapse]').forEach(btn => btn.onclick = () => {
+    const ci = Number(btn.dataset.collapse), key = String(courses[ci]?.id || ci);
+    if (collapsedCourses.has(ci) || collapsedCourses.has(key)) { collapsedCourses.delete(ci); collapsedCourses.delete(key); }
+    else { collapsedCourses.add(ci); collapsedCourses.add(key); }
+    renderAdminCms();
+  });
+  b.querySelectorAll('input[data-c]').forEach(inp => inp.oninput = () => { courses[inp.dataset.c][inp.dataset.f] = inp.value; hasUnsavedChanges = true; });
   b.querySelectorAll('input[data-l], select[data-l]').forEach(inp => {
     const [ci, li] = inp.dataset.l.split(':').map(Number);
     const ev = inp.tagName === 'SELECT' ? 'onchange' : 'oninput';
@@ -831,6 +826,8 @@ function renderAdminCms() {
       } else {
         lec[f] = inp.value;
       }
+      hasUnsavedChanges = true;
+      if (f === 'status') renderAdminCms();
     };
   });
 
@@ -844,6 +841,7 @@ function renderAdminCms() {
       reader.onload = () => {
         courses[ci].lectures[li].quizHtml = String(reader.result || '');
         courses[ci].lectures[li].quiz = null;
+        hasUnsavedChanges = true;
         toast('Quiz HTML attached');
         renderAdminCms();
       };
@@ -856,21 +854,26 @@ function renderAdminCms() {
       const [ci, li] = btn.dataset.qclear.split(':').map(Number);
       courses[ci].lectures[li].quizHtml = null;
       courses[ci].lectures[li].quiz = null;
+      hasUnsavedChanges = true;
       renderAdminCms();
     };
   });
 
-  $('#addCourse').onclick = () => { courses.push({ id: 'course-' + (courses.length + 1), title: 'New Course', lectures: [] }); renderAdminCms(); };
-  b.querySelectorAll('[data-del-c]').forEach(btn => btn.onclick = () => { courses.splice(Number(btn.dataset.delC), 1); renderAdminCms(); });
+  $('#addCourse').onclick = () => { courses.push({ id: 'course-' + (courses.length + 1), title: 'New Course', lectures: [] }); hasUnsavedChanges = true; renderAdminCms(); };
+  b.querySelectorAll('[data-del-c]').forEach(btn => btn.onclick = () => {
+    const ci = Number(btn.dataset.delC), courseToDelete = courses[ci];
+    if ((courseToDelete.lectures || []).length && !confirm(`Delete “${courseToDelete.title || 'this course'}” and its ${courseToDelete.lectures.length} lecture(s)?`)) return;
+    courses.splice(ci, 1); collapsedCourses.delete(ci); collapsedCourses.delete(String(courseToDelete.id || ci)); hasUnsavedChanges = true; renderAdminCms();
+  });
   b.querySelectorAll('[data-add-lec]').forEach(btn => btn.onclick = () => {
     const c = courses[Number(btn.dataset.addLec)];
     const n = c.lectures.length + 1;
     c.lectures.push({ id: `${c.id}-${Date.now().toString(36)}`, slug: '', bunnyGuid: null, title: `Lecture ${n}`, duration: null, status: 'soon', pdf: null, quiz: null, quizHtml: null, _isNew: true });
-    renderAdminCms();
+    collapsedCourses.delete(Number(btn.dataset.addLec)); collapsedCourses.delete(String(c.id || Number(btn.dataset.addLec))); hasUnsavedChanges = true; renderAdminCms();
   });
   b.querySelectorAll('[data-del-l]').forEach(btn => btn.onclick = () => {
     const [ci, li] = btn.dataset.delL.split(':').map(Number);
-    courses[ci].lectures.splice(li, 1); renderAdminCms();
+    courses[ci].lectures.splice(li, 1); hasUnsavedChanges = true; renderAdminCms();
   });
 
   $('#syncBunny').onclick = async () => {
@@ -896,6 +899,7 @@ function renderAdminCms() {
         });
         added++;
       });
+      hasUnsavedChanges = true;
       toast(`Synced ${bunnyVideos.length} videos (${added} new). Click Save!`);
       renderAdminCms();
     } catch (x) {
@@ -918,6 +922,7 @@ async function saveCmsToServer() {
   if (!res.ok) return toast(data.error || 'Failed to save catalog');
   adminData.courses = data.courses;
   catalog = data.courses;
+  hasUnsavedChanges = false;
   toast('Courses & quizzes saved!');
   renderAdmin();
 }
