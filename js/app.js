@@ -57,7 +57,7 @@ const CLIENT_CID = (() => {
   }
   return id;
 })();
-const DEVICE_LIMIT_MSG = 'Device limit reached: this account is active on 2 devices. Contact the administration to reset your devices. \u2014 \u0648\u0635\u0644 \u062d\u0633\u0627\u0628\u0643 \u0644\u0644\u062d\u062f \u0627\u0644\u0623\u0642\u0635\u0649 (\u062c\u0647\u0627\u0632\u0627\u0646)\u060c \u062a\u0648\u0627\u0635\u0644 \u0645\u0639 \u0627\u0644\u0625\u062f\u0627\u0631\u0629 \u0644\u0625\u0639\u0627\u062f\u0629 \u0636\u0628\u0637 \u0627\u0644\u0623\u062c\u0647\u0632\u0629.';
+const DEVICE_LIMIT_MSG = 'Device limit reached: this account is locked to 1 device only. Contact the administration to reset your device. \u2014 \u0647\u0630\u0627 \u0627\u0644\u062d\u0633\u0627\u0628 \u0645\u0631\u062a\u0628\u0637 \u0628\u062c\u0647\u0627\u0632 \u0648\u0627\u062d\u062f \u0641\u0642\u0637\u060c \u062a\u0648\u0627\u0635\u0644 \u0645\u0639 \u0627\u0644\u0625\u062f\u0627\u0631\u0629 \u0644\u0625\u0639\u0627\u062f\u0629 \u0636\u0628\u0637 \u0627\u0644\u062c\u0647\u0627\u0632.';
 const STREAM_CONFLICT_MSG = 'الحساب مشغّل محاضرة حالياً على جهازك الآخر — أوقف التشغيل هناك أولاً';
 function getDeviceInfo() {
   let deviceId = '';
@@ -1049,7 +1049,7 @@ function mountPlayer(box, playData, l, nextLec, errMessage = '') {
   let last = 0, idle = 0, bad = 0, isPseudoFs = false, graceUntil = 0, lastDevRep = 0;
   let envStrikes = 0, lastEnvStrike = 0, shotTimer = 0, beatTimer = 0, beatFails = 0;
   const guardLog = (why) => { try { console.debug('[guard]', why); } catch {} };
-  let wmLabel = `${session.name} \u00b7 ${session.id}`;
+  let wmLabel = String(session.id || '');
   let wmX = Math.random(), wmY = Math.random(), wmBox = null;
 
   box.addEventListener('contextmenu', e => e.preventDefault());
@@ -1275,9 +1275,12 @@ function mountPlayer(box, playData, l, nextLec, errMessage = '') {
       const data = await r.json();
       beatFails = 0;
       engine.rotate(data);
-      if (data.label) {
-        wmLabel = data.label.includes(session.id) ? data.label : `${data.label} \u00b7 ${session.id}`;
-        drawWm();
+      if (data.label || session.id) {
+        const nextLabel = String(session.id || '');
+        if (nextLabel && wmLabel !== nextLabel) {
+          wmLabel = nextLabel;
+          drawWm();
+        }
       }
       scheduleBeat(20000);
     } catch {
