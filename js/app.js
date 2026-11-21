@@ -170,7 +170,7 @@ function renderGoogleButtons() {
   const btnWidth = getGoogleButtonWidth();
   const opts = {
     theme: 'filled_black',
-    shape: 'pill',
+    shape: 'rectangular',
     size: 'large',
     text: 'continue_with',
     locale: 'en',
