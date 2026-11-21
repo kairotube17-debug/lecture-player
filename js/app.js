@@ -19,7 +19,7 @@ const CFG = {
   ADMIN_SETTINGS: '/api/admin/settings',
   ADMIN_STUDENT: '/api/admin/student',
   ADMIN_CATALOG: '/api/admin/catalog',
-  ADMIN_DRIVE_VIDEOS: '/api/admin/drive-videos',
+  ADMIN_BUNNY_VIDEOS: '/api/admin/bunny-videos',
   DEMO_DATA: 'data/courses.json'
 };
 const $ = s => document.querySelector(s);
@@ -28,7 +28,7 @@ const ls = { get: k => { try { return localStorage.getItem(k) } catch { return n
 let session = JSON.parse(sessionStorage.getItem('dg:s') || 'null'), catalog = [], course = null, cleanup = null;
 let pendingEmail = '', resetEmail = '', resendTimer = 0;
 let adminData = null, adminTab = 'students';
-let driveVideos = [];
+let bunnyVideos = [];
 let googleClientId = '', googleInited = false;
 
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2400) };
@@ -712,14 +712,14 @@ function slugify(s) {
     .replace(/^-+|-+$/g, '') || 'lecture';
 }
 
-let driveFetchStarted = false;
+let bunnyFetchStarted = false;
 function renderAdminCms() {
   const b = $('#admBody'), courses = adminData.courses || [];
-  if (!driveVideos.length && !driveFetchStarted && CFG.ADMIN_DRIVE_VIDEOS) {
-    driveFetchStarted = true;
-    fetch(CFG.API + CFG.ADMIN_DRIVE_VIDEOS, auth())
+  if (!bunnyVideos.length && !bunnyFetchStarted && CFG.ADMIN_BUNNY_VIDEOS) {
+    bunnyFetchStarted = true;
+    fetch(CFG.API + CFG.ADMIN_BUNNY_VIDEOS, auth())
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && Array.isArray(d.videos)) { driveVideos = d.videos; if (adminTab === 'cms') renderAdminCms(); } })
+      .then(d => { if (d && Array.isArray(d.videos)) { bunnyVideos = d.videos; if (adminTab === 'cms') renderAdminCms(); } })
       .catch(() => {});
   }
 
@@ -727,14 +727,16 @@ function renderAdminCms() {
     const s = String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
     return s || fallback;
   };
-  const parseDriveId = (raw) => {
+  const parseBunnyGuid = (raw) => {
     const s = String(raw || '').trim();
-    const m = s.match(/\/d\/([A-Za-z0-9_-]{10,80})|[?&]id=([A-Za-z0-9_-]{10,80})/);
-    if (m) return m[1] || m[2];
-    return /^[A-Za-z0-9_-]{20,80}$/.test(s) ? s : '';
+    const embed = s.match(/\/embed\/\d+\/([A-Za-z0-9_-]+)/i);
+    if (embed) return embed[1];
+    const guid = s.match(/([A-Za-z0-9_-]{36,64})/);
+    if (guid) return guid[1];
+    return /^[A-Za-z0-9_-]{20,64}$/.test(s) ? s : '';
   };
 
-  let html = `<div class="adm-bar"><button id="addCourse" class="btn ghost sm">+ Add Course</button><button id="syncDrive" class="btn ghost sm">Sync from Drive</button><span class="grow"></span><button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button></div><div class="cms-grid">`;
+  let html = `<div class="adm-bar"><button id="addCourse" class="btn ghost sm">+ Add Course</button><button id="syncBunny" class="btn ghost sm">Sync from Bunny</button><span class="grow"></span><button id="saveCms" class="btn lime">Save All Courses &amp; Quizzes</button></div><div class="cms-grid">`;
 
   courses.forEach((c, ci) => {
     html += `<div class="cms-card">
@@ -745,18 +747,18 @@ function renderAdminCms() {
       </div>`;
 
     (c.lectures || []).forEach((l, li) => {
-      const hasDriveMatch = l.driveId && driveVideos.some(v => v.fileId === l.driveId);
-      const isCustom = l._forceCustom || (!hasDriveMatch && !!(l.driveId || (l.slug && l.slug !== l.id)));
-      const srcVal = l.driveId ? `https://drive.google.com/file/d/${l.driveId}/view` : (l.slug || '');
-      let optsHtml = '<option value="">-- Select Drive Video --</option>';
-      driveVideos.forEach(v => {
-        const mins = v.durationMs ? ` (${Math.max(1, Math.round(v.durationMs / 60000))} min)` : '';
-        optsHtml += `<option value="${esc(v.fileId)}" ${l.driveId === v.fileId && !l._forceCustom ? 'selected' : ''}>${esc(v.name + mins)}</option>`;
+      const bunnyGuid = l.bunnyGuid || l.bunnyId || '';
+      const hasBunnyMatch = bunnyGuid && bunnyVideos.some(v => v.guid === bunnyGuid);
+      const isCustom = l._forceCustom || (!!bunnyGuid && !hasBunnyMatch);
+      let optsHtml = '<option value="">-- Select Bunny Stream Video --</option>';
+      bunnyVideos.forEach(v => {
+        const mins = v.duration ? ` (${Math.max(1, Math.round(v.duration / 60))} min)` : '';
+        optsHtml += `<option value="${esc(v.guid)}" ${bunnyGuid === v.guid && !l._forceCustom ? 'selected' : ''}>${esc(v.name + mins)}</option>`;
       });
-      if (l.driveId && !hasDriveMatch && !l._forceCustom) {
-        optsHtml += `<option value="${esc(l.driveId)}" selected>Drive ID: ${esc(l.driveId)}</option>`;
+      if (bunnyGuid && !hasBunnyMatch && !l._forceCustom) {
+        optsHtml += `<option value="${esc(bunnyGuid)}" selected>Bunny GUID: ${esc(bunnyGuid)}</option>`;
       }
-      optsHtml += `<option value="__custom__" ${isCustom ? 'selected' : ''}>-- Custom Link / ID / B2 Slug --</option>`;
+      optsHtml += `<option value="__custom__" ${isCustom ? 'selected' : ''}>-- Enter Bunny GUID / Embed URL --</option>`;
 
       html += `<div class="cms-lec-card">
         <div class="cms-row-1">
@@ -774,9 +776,9 @@ function renderAdminCms() {
         </div>
         <div class="cms-row-2">
           <div class="cms-field">
-            <label>DRIVE VIDEO</label>
-            <select data-l="${ci}:${li}" data-f="driveSelect">${optsHtml}</select>
-            ${isCustom ? `<input data-l="${ci}:${li}" data-f="source" value="${esc(srcVal)}" placeholder="Google Drive link/ID or B2 slug" style="margin-top:6px">` : ''}
+            <label>BUNNY STREAM VIDEO</label>
+            <select data-l="${ci}:${li}" data-f="bunnySelect">${optsHtml}</select>
+            ${isCustom ? `<input data-l="${ci}:${li}" data-f="source" value="${esc(bunnyGuid)}" placeholder="Bunny video GUID or embed URL" style="margin-top:6px">` : ''}
           </div>
           <div class="cms-field">
             <label>PDF LINK (OPTIONAL)</label>
@@ -809,22 +811,21 @@ function renderAdminCms() {
       if (f === 'title') {
         lec.title = inp.value;
         if (lec._isNew) lec.id = slugifyId(inp.value, lec.id);
-      } else if (f === 'driveSelect') {
+      } else if (f === 'bunnySelect') {
         if (inp.value === '__custom__') {
           lec._forceCustom = true;
           renderAdminCms();
         } else {
           lec._forceCustom = false;
-          lec.driveId = inp.value || null;
+          lec.bunnyGuid = inp.value || null;
           lec.slug = lec.id;
-          const match = driveVideos.find(v => v.fileId === inp.value);
-          if (match && match.durationMs) lec.duration = Math.max(1, Math.round(match.durationMs / 60000));
+          const match = bunnyVideos.find(v => v.guid === inp.value);
+          if (match && match.duration) lec.duration = Math.max(1, Math.round(match.duration / 60));
           renderAdminCms();
         }
       } else if (f === 'source') {
-        const did = parseDriveId(inp.value);
-        lec.driveId = did || null;
-        lec.slug = did ? lec.id : inp.value.trim();
+        lec.bunnyGuid = parseBunnyGuid(inp.value) || null;
+        lec.slug = lec.id;
       } else if (f === 'pdf') {
         lec.pdf = inp.value.trim() || null;
       } else {
@@ -864,7 +865,7 @@ function renderAdminCms() {
   b.querySelectorAll('[data-add-lec]').forEach(btn => btn.onclick = () => {
     const c = courses[Number(btn.dataset.addLec)];
     const n = c.lectures.length + 1;
-    c.lectures.push({ id: `${c.id}-${Date.now().toString(36)}`, slug: '', driveId: null, title: `Lecture ${n}`, duration: null, status: 'soon', pdf: null, quiz: null, quizHtml: null, _isNew: true });
+    c.lectures.push({ id: `${c.id}-${Date.now().toString(36)}`, slug: '', bunnyGuid: null, title: `Lecture ${n}`, duration: null, status: 'soon', pdf: null, quiz: null, quizHtml: null, _isNew: true });
     renderAdminCms();
   });
   b.querySelectorAll('[data-del-l]').forEach(btn => btn.onclick = () => {
@@ -872,35 +873,35 @@ function renderAdminCms() {
     courses[ci].lectures.splice(li, 1); renderAdminCms();
   });
 
-  $('#syncDrive').onclick = async () => {
-    const btn = $('#syncDrive'); btn.disabled = true; btn.textContent = 'Syncing...';
+  $('#syncBunny').onclick = async () => {
+    const btn = $('#syncBunny'); btn.disabled = true; btn.textContent = 'Syncing...';
     try {
-      const r = await fetch(CFG.API + CFG.ADMIN_DRIVE_VIDEOS, auth());
+      const r = await fetch(CFG.API + CFG.ADMIN_BUNNY_VIDEOS, auth());
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Sync failed');
-      driveVideos = d.videos || [];
+      bunnyVideos = d.videos || [];
       if (!courses.length) courses.push({ id: 'course-1', title: 'Main Course', lectures: [] });
       const existing = new Set();
-      courses.forEach(c => (c.lectures || []).forEach(l => { if (l.driveId) existing.add(l.driveId); }));
+      courses.forEach(c => (c.lectures || []).forEach(l => { if (l.bunnyGuid) existing.add(l.bunnyGuid); }));
       let added = 0;
       const targetCourse = courses[0];
-      driveVideos.forEach(v => {
-        if (existing.has(v.fileId)) return;
+      bunnyVideos.forEach(v => {
+        if (existing.has(v.guid)) return;
         const cleanTitle = v.name.replace(/\.[^/.]+$/, '');
-        const baseId = slugifyId(cleanTitle, 'lec') + '-' + v.fileId.slice(0, 4).toLowerCase();
+        const baseId = slugifyId(cleanTitle, 'lec') + '-' + v.guid.slice(0, 4).toLowerCase();
         targetCourse.lectures.push({
-          id: baseId, slug: baseId, driveId: v.fileId, title: cleanTitle,
-          duration: v.durationMs ? Math.max(1, Math.round(v.durationMs / 60000)) : null,
+          id: baseId, slug: baseId, bunnyGuid: v.guid, title: cleanTitle,
+          duration: v.duration ? Math.max(1, Math.round(v.duration / 60)) : null,
           status: 'soon', pdf: null, quiz: null, quizHtml: null, _isNew: true,
         });
         added++;
       });
-      toast(`Synced ${driveVideos.length} videos (${added} new). Click Save!`);
+      toast(`Synced ${bunnyVideos.length} videos (${added} new). Click Save!`);
       renderAdminCms();
     } catch (x) {
-      toast(x.message || 'Drive sync failed');
+      toast(x.message || 'Bunny sync failed');
     } finally {
-      btn.disabled = false; btn.textContent = 'Sync from Drive';
+      btn.disabled = false; btn.textContent = 'Sync from Bunny';
     }
   };
 
