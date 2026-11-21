@@ -809,18 +809,22 @@ function renderAdminCms() {
       } else if (f === 'bunnySelect') {
         if (inp.value === '__custom__') {
           lec._forceCustom = true;
+          lec.bunnyGuid = null;
           renderAdminCms();
         } else {
           lec._forceCustom = false;
-          lec.bunnyGuid = inp.value || null;
+          const selectedGuid = String(inp.value || '').trim();
+          const match = bunnyVideos.find(v => String(v.guid || '').trim() === selectedGuid);
+          lec.bunnyGuid = match ? String(match.guid).trim() : null;
           lec.slug = lec.id;
-          const match = bunnyVideos.find(v => v.guid === inp.value);
+          if (lec.bunnyId) delete lec.bunnyId;
           if (match && match.duration) lec.duration = Math.max(1, Math.round(match.duration / 60));
           renderAdminCms();
         }
       } else if (f === 'source') {
-        lec.bunnyGuid = parseBunnyGuid(inp.value) || null;
+        lec.bunnyGuid = parseBunnyGuid(String(inp.value || '').trim()) || null;
         lec.slug = lec.id;
+        if (lec.bunnyId) delete lec.bunnyId;
       } else if (f === 'pdf') {
         lec.pdf = inp.value.trim() || null;
       } else {
