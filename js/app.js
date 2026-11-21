@@ -152,14 +152,15 @@ async function handleGoogleCredential(resp) {
   }
 }
 function getGoogleButtonWidth() {
-  const candidates = [$('#loginForm button[type="submit"]'), $('#signupBtn')];
+  const candidates = [$('.g-btn-box'), $('#loginForm'), $('#signupForm')];
   for (const el of candidates) {
     if (!el) continue;
-    const w = Math.round(el.getBoundingClientRect().width);
-    if (w >= 180) return Math.min(400, Math.max(200, w));
+    const r = el.getBoundingClientRect();
+    if (r.width >= 180) return Math.max(180, Math.floor(r.width));
   }
   return 340;
 }
+let googleRenderTimer = 0;
 function renderGoogleButtons() {
   if (!googleClientId || !window.google?.accounts?.id) return;
   if (!googleInited) {
@@ -169,7 +170,7 @@ function renderGoogleButtons() {
   const btnWidth = getGoogleButtonWidth();
   const opts = {
     theme: 'filled_black',
-    shape: 'rectangular',
+    shape: 'pill',
     size: 'large',
     text: 'continue_with',
     locale: 'en',
@@ -183,6 +184,10 @@ function renderGoogleButtons() {
     window.google.accounts.id.renderButton(btn, opts);
   }
 }
+window.addEventListener('resize', () => {
+  clearTimeout(googleRenderTimer);
+  googleRenderTimer = setTimeout(renderGoogleButtons, 180);
+});
 async function initGoogleAuth() {
   if (!CFG.API) return;
   try {
