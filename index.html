@@ -18,14 +18,10 @@
   .g-div{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;font-size:13px;color:var(--muted);opacity:.75;margin:4px 0}
   .g-div::before,.g-div::after{content:"";flex:1;height:1px;background:var(--line,rgba(255,255,255,.12))}
   [data-theme="light"] .g-div::before,[data-theme="light"] .g-div::after{background:rgba(60,20,120,.16)}
-  .g-btn-box{position:relative;width:100%;height:48px;border-radius:12px;overflow:hidden;box-sizing:border-box}
-  .g-custom-btn{position:absolute;inset:0;width:100%;height:48px;display:flex;align-items:center;justify-content:center;gap:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;color:var(--text);font:inherit;font-size:.95rem;font-weight:600;cursor:pointer;box-sizing:border-box;transition:background .18s,border-color .18s,box-shadow .18s;z-index:1}
-  .g-custom-btn svg{flex-shrink:0}
-  [data-theme="light"] .g-custom-btn{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.12);color:#111}
-  .g-btn-box:hover .g-custom-btn{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.24)}
-  [data-theme="light"] .g-btn-box:hover .g-custom-btn{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.22)}
-  .g-btn{position:absolute;inset:0;width:100%;height:48px;opacity:0.0001;z-index:2;cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center}
-  .g-btn iframe{width:100%!important;height:100%!important;transform:scale(1.4);transform-origin:center;cursor:pointer!important}
+  .g-btn-box{position:relative;width:100%;min-height:48px;border-radius:12px;overflow:hidden;box-sizing:border-box}
+  .g-custom-btn{display:none!important}
+  .g-btn{width:100%;min-height:48px;cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .g-btn iframe{width:100%!important;height:48px!important;transform:none;transform-origin:center;cursor:pointer!important}
   .link-btn{background:none;border:none;color:var(--lime,#c6ff33);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 0;text-align:right;align-self:flex-end}
   [data-theme="light"] .link-btn{color:#7d39eb}
   .pw-wrap{position:relative;display:flex;align-items:center;width:100%}
@@ -193,6 +189,6 @@
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" integrity="sha384-9v3HcdYrO3D+OPDTjZ40RXocgE4GtXVCd3/mCS62JsM93JXgI1afJVuwjFvsu6ni" crossorigin="anonymous"></script>
-<script src="js/app.js?v=20261117f"></script>
+<script src="js/app.js?v=20261121b"></script>
 </body>
 </html>
