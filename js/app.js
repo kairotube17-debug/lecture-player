@@ -815,9 +815,11 @@ function renderAdminCms() {
           lec._forceCustom = false;
           const selectedGuid = String(inp.value || '').trim();
           const match = bunnyVideos.find(v => String(v.guid || '').trim() === selectedGuid);
-          lec.bunnyGuid = match ? String(match.guid).trim() : null;
+          lec.bunnyGuid = selectedGuid ? (match ? String(match.guid).trim() : selectedGuid) : null;
           lec.slug = lec.id;
-          if (lec.bunnyId) delete lec.bunnyId;
+          delete lec.bunnyId;
+          delete lec.driveId;
+          delete lec.hls;
           if (match && match.duration) lec.duration = Math.max(1, Math.round(match.duration / 60));
           renderAdminCms();
         }
@@ -917,6 +919,25 @@ function renderAdminCms() {
 }
 
 async function saveCmsToServer() {
+  const bodyEl = $('#admBody');
+  if (bodyEl && adminData?.courses) {
+    bodyEl.querySelectorAll('select[data-l][data-f="bunnySelect"]').forEach(sel => {
+      const [ci, li] = sel.dataset.l.split(':').map(Number);
+      const lec = adminData.courses[ci]?.lectures?.[li];
+      if (!lec) return;
+      if (sel.value && sel.value !== '__custom__') lec.bunnyGuid = sel.value.trim();
+      else if (sel.value === '') lec.bunnyGuid = null;
+    });
+    bodyEl.querySelectorAll('input[data-l][data-f="source"]').forEach(inp => {
+      const [ci, li] = inp.dataset.l.split(':').map(Number);
+      const lec = adminData.courses[ci]?.lectures?.[li];
+      if (lec && inp.value.trim()) lec.bunnyGuid = inp.value.trim();
+    });
+    adminData.courses.forEach(c => (c.lectures || []).forEach(l => {
+      delete l.driveId; delete l.hls; delete l.bunnyId;
+    }));
+  }
+
   const res = await fetch(CFG.API + CFG.ADMIN_CATALOG, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.token },
